@@ -7,6 +7,8 @@
 ###variables###
 
 note_folder=~/Notes
+default_diffprogram=vimdiff
+
 default_cam=/dev/video0
 
 #scanimage -L 
@@ -201,6 +203,8 @@ usage()
   echo "open <notename> <name>: open note item"
   echo "list [notename]: list note items or notes"
   echo "remind [ <notename> <date compatible string> ]: add reminder to note/look reminders"
+  echo "move <notename start> <notename end> <note item name>: move note item"
+  echo "restore [note]: restore note/note item"
   echo "add <notename> <name> <program> <append>: add note item Deprecate?"
   echo "screenshot|screens <notename> <name> <delay>: Shoots a screenshot"
 #  echo "guishot <notename> <name> [delay]: Shoots a screenshot of the monitor"
@@ -270,6 +274,21 @@ is_not_nom_reserved()
   return $status
 }
 
+# $1 filepath
+file_exist_quest()
+{
+  if [ -e "$1" ]; then
+    echo "File name exists already. Overwrite?"
+    local question_an
+    read question_an
+    if ! echo "$question_an" | grep -q "y"; then 
+      exit 0
+    else
+      rm -r "$1"
+    fi
+  fi
+}
+
 
 #$1 filepath, $2 original file path (without suffix)
 file_exist_reserved_check()
@@ -278,20 +297,29 @@ file_exist_reserved_check()
   status="$?"
   if [ "$status" = "1" ] ; then
     exit 1
-  elif [ "$status" != "0" ] ; then
+  elif [ "$status" != "0" ]; then
     echo "Error: note ($(basename "$2")) doesn't exist" >&2
     exit 1
   fi
-  if [ -e "$1" ]; then
-    echo "File name exists already. Overwrite?"
-    local question_an
-    read question_an
-    if ! echo "$question_an" | grep -q "y"; then 
-      exit 0
-    fi
-  fi
+  file_exist_quest "$1"
 }
 
+
+
+
+#$1 filepath
+note_exist_reserved_check()
+{
+  is_not_nom_reserved "$1"
+  status="$?"
+  if [ "$status" = "1" ] ; then
+    exit 1
+  elif [ "$status" != "0" ] && [ "$status" != "2" ]; then
+    echo "Error: note ($(basename "$1")) doesn't exist" >&2
+    exit 1
+  fi
+  file_exist_quest "$1"
+}
 
 
 
@@ -434,6 +462,74 @@ nom_housekeeping_note()
   done
 }
 
+#$1 notename start, $2 notename end, $3 note item
+move_note_item()
+{
+  if [ "$#" -lt "3" ]; then
+    echo "Error: too few parameters" >&2
+    return 1
+  fi
+  if [ ! -d "$note_folder/$1" ]; then
+    echo "Error: source note doesn't exist" >&2
+    return 1
+  fi
+  if [ ! -e "$note_folder/$1/$3" ]; then
+    echo "Error: note item doesn't exist" >&2
+    return 1
+  fi
+  if [ ! -d "$note_folder/$2" ]; then
+    echo "Error: destination note doesn't exist" >&2
+    return 1
+  fi
+  nom_path_exist_check "$note_folder/$2/$3"
+  if [ "$?" != "0" ]; then
+    exit 1
+  fi
+  
+  if [ "$3" != "$text_name" ]; then
+    file_exist_quest "$note_folder/$2/$3"
+    mv "$note_folder/$1/$3" "$note_folder/$2/$3"
+  else
+    $default_diffprogram "$note_folder/$2/$3" "$note_folder/$1/$3"
+  fi
+  return 0
+}
+
+#$1 (optional) notename
+restore_trash()
+{
+  if [ "$1" = "" ]; then
+    if [ ! -d "$note_folder/$trash_name" ] ||  [ "$(ls "$note_folder/$trash_name" | wc -l)" = "0" ]; then
+      echo "Note trash is empty"
+      return 0 
+    elif [ "$(ls "$note_folder/$trash_name" | wc -l)" = "1" ]; then
+      note_exist_reserved_check "$note_folder/$(ls "$note_folder/$trash_name")"
+      mv "$note_folder/$trash_name/$(ls "$note_folder/$trash_name")" "$note_folder/"
+      rm -r "$note_folder/$trash_name/"
+      return 0
+    else
+      echo "Error: trash has multiple items" >&2
+      return 1
+    fi
+  fi
+  if [ -d "$note_folder/$1" ]; then
+    if [ ! -d "$note_folder/$1/$trash_name" ] ||  [ "$(ls "$note_folder/$1/$trash_name" | wc -l)" = "0" ]; then
+      echo "Note item trash is empty"
+      return 0
+    elif [ "$(ls "$note_folder/$1/$trash_name" | wc -l)" = "1" ]; then
+      note_exist_reserved_check "$note_folder/$1/$(ls "$note_folder/$1/$trash_name")"
+      mv "$note_folder/$1/$trash_name/$(ls "$note_folder/$1/$trash_name")" "$note_folder/$1/"
+      rm -r "$note_folder/$1/$trash_name/"
+      return 0
+    else
+      echo "Error: trash has multiple items" >&2
+      return 1
+    fi
+  else
+    echo "Error: Note doesn't exist" >&2
+  fi
+}
+
 
 #$1 notename
 add_note()
@@ -501,6 +597,7 @@ list_note_items()
       echo "id $nidcount: $tmp_file_n"
     else
       echo "id $nidcount (trash): $(ls "$note_folder/$1/$trash_name" | tr "\n" " ")"
+      #echo "(Purge with \"$0 del $1 $trash_name\")"
     fi
   done
 }
@@ -515,6 +612,7 @@ list_notes()
       echo "$tmp_file_n"
     else
       echo "(trash) $(ls "$note_folder/$trash_name" | tr "\n" " ")"
+      #echo "(Purge with \"$0 delnote $trash_name\")"
     fi
     #echo "id $nidcount: $tmp_file_n"
   done
@@ -584,6 +682,7 @@ open_note_item()
 add_note_item()
 {
   file_exist_reserved_check "$note_folder/$1/$2"
+  touch "$note_folder/$1/$2"
   nom_open "$note_folder/$1/$2" "$3" "$4"
 }
 
@@ -675,6 +774,8 @@ case "$sel_option" in
   "addnote")add_note $@;;
   "delnote")del_note $@;;
   "remind")note_reminder $@;;
+  "move")move_note_item $@;;
+  "restore")restore_trash $@;;
   "add")add_note_item $@;;
   "screenshot"|"screens")nom_screenshot $@;;
  # "guishot") nom_screenshot $@;;
@@ -696,5 +797,6 @@ case "$sel_option" in
   *)usage
   exit 1;;
 esac
+status=$?
 
-exit 0
+exit $status
