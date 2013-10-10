@@ -1,7 +1,7 @@
 #/usr/bin/env bash
 #LICENCE: gpl3
 
-#dependencies: bash, sane, imagemagick, ffmpeg v4l-utils
+#dependencies: bash, sane, imagemagick, ffmpeg v4l-utils, (vlc),(vimdiff)
 
 
 ###variables###
@@ -14,9 +14,10 @@ default_cam=/dev/video0
 #scanimage -L 
 default_scan="" #<scanner name>
 
-default_audio_type=ogg
+
 default_picture_type=jpg
-default_container_type=webm
+default_video_type=webm
+default_audio_type=ogg
 
 tmp_folder=/tmp/$UID-noteman
 
@@ -97,7 +98,7 @@ nom_camshot()
 # $1 note name, $2 save name
 nom_camrec_ffmpeg()
 {
-  local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "$default_container_type")"
+  local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "$default_video_type")"
   file_exist_reserved_check "$tmp_filepath" "$note_folder/$1/$2"
   [ -e "$tmp_filepath" ] && rm "$tmp_filepath"
   #if [ "$3" != "" ]; then
