@@ -203,10 +203,9 @@ usage()
   echo "del <notename> <name/$trash_name>: delete note item/purge note item trash"
   echo "open <notename> <name>: open note item"
   echo "list [notename]: list note items or notes"
-  echo "remind [ <notename> <date compatible string> ]: add reminder to note/look reminders"
+  echo "remind [ <notename> <date compatible string> ]: add reminder to note/get reminders"
   echo "move <notename start> <notename end> <note item name>: move note item"
   echo "restore [note]: restore note/note item"
-  echo "add <notename> <name> <program> <append>: add note item Deprecate?"
   echo "screenshot|screens <notename> <name> <delay>: Shoots a screenshot"
 #  echo "guishot <notename> <name> [delay]: Shoots a screenshot of the monitor"
   #echo "cmdshot <notename> <name> [delay]: Shoots a screenshot of commandline"
@@ -215,6 +214,7 @@ usage()
   echo "camrec <notename> <name>: Record (video+audio) with the default webcam"
   echo "audiorec <notename> <name>: Record only audio"
   echo "scan <notename> <name>: Scan"
+  echo "add <notename> <name> <program> <append>: add note item Deprecate?"
   echo "delay is in seconds"
   #echo "Press q to stop recording"
 
@@ -322,7 +322,104 @@ note_exist_reserved_check()
   file_exist_quest "$1"
 }
 
+#$1 folder $2 id  returns 0 exist, 1 not exist
+get_name_by_id()
+{
+  if [ "$2" = "0" ]; then
+    echo "$trash_name"
+    return 0
+  elif  [ "$2" = "1" ]; then
+    echo "$text_name"
+    return 0
+  fi
+  nidcount=1
+  for tmp_file_n in $(ls "$1")
+  do
+    if [ "$tmp_file_n" != "$trash_name" ] && [ "$tmp_file_n" != "$text_name" ]; then
+      ((nidcount+=1))
+      if [ "$nidcount" = "$2" ]; then
+        echo "$tmp_file_n"
+        return 0
+      fi
+    fi
+  done  
+  echo "ID ($2) not found" >&2
+  return 1
+}
 
+#$1 folder $2 name  returns 0 exist, 1 not exist
+get_id_by_name()
+{
+  if [ "$2" = "$trash_name" ]; then
+    echo "0"
+    return 0
+  elif  [ "$2" = "$text_name" ]; then
+    echo "1"
+    return 0
+  fi
+  nidcount=1
+  for tmp_file_n in $(ls "$1")
+  do
+    if [ "$tmp_file_n" != "$trash_name" ] && [ "$tmp_file_n" != "$text_name" ]; then
+      ((nidcount+=1))
+      if [ "$tmp_file_n" = "$2" ]; then
+        echo "$nidcount"
+        return 0
+      fi
+    fi
+  done
+  echo "Name ($2) not found" >&2
+  return 1
+}
+
+#$1 folder, $2 name/id  returns 0 exist, 1 not exist 2 id not exist/empty
+get_by_ni()
+{
+  if [ "$2" = "" ]; then
+    echo "Error: name/id empty" >&2
+    return 2
+  elif [[ "$2" != *[!0-9]* ]]; then
+    tmp_collect_status="$(get_name_by_id "$1" "$2")"
+    status="$?"
+    echo "$tmp_collect_status"
+    if [ "$status" != "0" ]; then 
+      return 2
+    elif [ -e "$1/$tmp_collect_status" ]; then
+      return 0
+    else
+      return 1
+    fi
+  else
+    echo "$2"
+    if [ -e "$1/$2" ]; then
+      return 0
+    else
+      return 1
+    fi
+  fi
+}
+
+
+#$1 folder
+list_id_name()
+{
+  if [ -e "$1/$trash_name" ]; then
+    echo "id 0: $trash_name"
+    echo "Trash contains: $(ls "$1/$trash_name" | tr "\n" " ")"
+  fi
+  if  [ -e "$1/$text_name" ]; then
+    echo "id 1: $text_name"
+  fi
+  nidcount=1
+  for tmp_file_n in $(ls "$1")
+  do
+    if [ "$tmp_file_n" != "$trash_name" ] && [ "$tmp_file_n" != "$text_name" ]; then
+      ((nidcount+=1))
+      echo "id $nidcount: $tmp_file_n"
+    fi
+  done
+  return 0
+}
 
 #$1 filepath, $2 default filetype; echos refined path, speaks to user via debug
 filetype_override()
@@ -410,7 +507,12 @@ nom_housekeeping()
       mv "$note_folder/$tmp_file_n" "$note_folder/$tmp_file_n_new"
       tmp_file_n="$tmp_file_n_new"
     fi
-
+    
+    if [ ! -d "$note_folder/$tmp_file_n" ]; then
+      mv "$note_folder/$tmp_file_n" "$tmp_folder"
+      mkdir "$note_folder/$tmp_file_n"
+      mv "$tmp_folder/$tmp_file_n" "$note_folder/$tmp_file_n"      
+    fi
 
     if [ ! -e "$note_folder/$tmp_file_n/$text_name" ]; then
       touch "$note_folder/$tmp_file_n/$text_name"
@@ -432,9 +534,21 @@ note_reminder()
   if [ "$#" = "0" ]; then
     nom_housekeeping   
   else
-    if [ -d "$note_folder/$1" ]; then
+    decoded_notename="$(get_by_ni "$note_folder" "$1")"
+    status=$?
+    if [ "$status" = "1" ]; then
+      echo "Error: \"$decoded_notename\" not found" >&2
+      return 1
+    elif  [ ! -d "$note_folder/$decoded_notename" ]; then
+      echo "Error: \"$decoded_notename\" isn't a directory" >&2
+      return 1
+    elif [ "$status" != "0" ]; then
+      return 1
+    fi
+    
+    if [ -d "$note_folder/$decoded_notename" ]; then
       local temp_time="$(date --date="$2" +%s)"
-      echo "$temp_time" > "$note_folder/$1/$timestamp_name"
+      echo "$temp_time" > "$note_folder/$decoded_notename/$timestamp_name"
       date --date="@$temp_time"
     else
       echo "Error: invalid note" >&2
@@ -470,28 +584,46 @@ move_note_item()
     echo "Error: too few parameters" >&2
     return 1
   fi
-  if [ ! -d "$note_folder/$1" ]; then
-    echo "Error: source note doesn't exist" >&2
+
+  decoded_notenamesrc="$(get_by_ni "$note_folder" "$1")"
+  status=$?
+  if [ "$status" = "1" ]; then
+    echo "Error: Note name ($decoded_notenamesrc) not found" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
     return 1
   fi
-  if [ ! -e "$note_folder/$1/$3" ]; then
-    echo "Error: note item doesn't exist" >&2
+  decoded_notenamedest="$(get_by_ni "$note_folder" "$2")"
+  status=$?
+  if [ "$status" = "1" ]; then
+    echo "Error: Note name ($decoded_notenamedest) not found" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
     return 1
   fi
-  if [ ! -d "$note_folder/$2" ]; then
-    echo "Error: destination note doesn't exist" >&2
+  decoded_name="$(get_by_ni "$note_folder/$decoded_notenamesrc" "$3")"
+  status=$?
+  if [ "$decoded_name" = "$trash_name" ]; then
+    echo "Error: can't move trash" >&2
+    return 1
+  elif [ "$status" = "1" ]; then
+    echo "Error: Note item name ($decoded_name) not found" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
     return 1
   fi
-  nom_path_exist_check "$note_folder/$2/$3"
-  if [ "$?" != "0" ]; then
-    exit 1
-  fi
+
+
+#  nom_path_exist_check "$note_folder/$2/$3"
+#  if [ "$?" != "0" ]; then
+#    exit 1
+#  fi
   
-  if [ "$3" != "$text_name" ]; then
-    file_exist_quest "$note_folder/$2/$3"
-    mv "$note_folder/$1/$3" "$note_folder/$2/$3"
+  if [ "$decoded_name" != "$text_name" ]; then
+    file_exist_quest "$note_folder/$decoded_notenamedest/$decoded_name"
+    mv "$note_folder/$decoded_notenamesrc/$decoded_name" "$note_folder/$decoded_notenamedest"
   else
-    $default_diffprogram "$note_folder/$2/$3" "$note_folder/$1/$3"
+    $default_diffprogram "$note_folder/$decoded_notenamedest/$text_name" "$note_folder/$decoded_notenamesrc/$text_name"
   fi
   return 0
 }
@@ -561,17 +693,20 @@ del_note()
     echo "Error: tried to delete empty note" >&2
     return
   fi
-  if [ ! -e "$note_folder/$1" ]; then
-    if [ "$1" = "$trash_name" ]; then
+  decoded_notename="$(get_by_ni "$note_folder" "$1")"
+  status=$?
+  if [ "$status" = "1" ]; then
+    if [ "$decoded_notename" = "$trash_name" ]; then
       echo "Trash (notes) already purged"
       return 0
     else
-      echo "Error: Note not found" >&2
+      echo "Error: Note name ($decoded_notename) not found" >&2
       return 1
     fi
-    
+  elif [ "$status" != "0" ]; then
+    return 1
   fi
-  if [ "$1" = "$trash_name" ]; then
+  if [ "$decoded_notename" = "$trash_name" ]; then
     echo "Purge trash bin for notes"
     rm -r "$note_folder/$trash_name"
   else
@@ -579,44 +714,30 @@ del_note()
       rm -r "$note_folder/$trash_name"
     fi
     mkdir "$note_folder/$trash_name"
-    mv "$note_folder/$1" "$note_folder/$trash_name"
+    mv "$note_folder/$decoded_notename" "$note_folder/$trash_name"
   fi
 }
 
 #$1 notename
 list_note_items()
 {
-  if [ "$1" = "" ]; then
-    echo "notename empty" >&2
+  decoded_notename="$(get_by_ni "$note_folder" "$1")"
+  status=$?
+  if [ "$status" = "1" ]; then
+    echo "Error: \"$decoded_notename\" not found" >&2
+    return 1
+  elif  [ ! -d "$note_folder/$decoded_notename" ]; then
+    echo "Error: \"$decoded_notename\" isn't a directory" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
     return 1
   fi
-  nidcount=0
-  for tmp_file_n in $(ls "$note_folder/$1")
-  do
-    ((nidcount+=1))
-    if [ "$tmp_file_n" != "$trash_name" ]; then
-      echo "id $nidcount: $tmp_file_n"
-    else
-      echo "id $nidcount (trash): $(ls "$note_folder/$1/$trash_name" | tr "\n" " ")"
-      #echo "(Purge with \"$0 del $1 $trash_name\")"
-    fi
-  done
+  list_id_name "$note_folder/$decoded_notename"
 }
 
 list_notes()
 {
-  nidcount=0
-  for tmp_file_n in $(ls "$note_folder")
-  do
-    ((nidcount+=1))
-    if [ "$tmp_file_n" != "$trash_name" ]; then
-      echo "$tmp_file_n"
-    else
-      echo "(trash) $(ls "$note_folder/$trash_name" | tr "\n" " ")"
-      #echo "(Purge with \"$0 delnote $trash_name\")"
-    fi
-    #echo "id $nidcount: $tmp_file_n"
-  done
+  list_id_name "$note_folder"
 }
 
 #$1 notename, $2 (optional) item name or id, $3 (optional) program
@@ -624,55 +745,57 @@ list_notes()
 open_note_item()
 { 
   if [ "$1" = "" ]; then
-    echo "notename empty" >&2
+    echo "Error: notename empty" >&2
     return 1
   fi
+  decoded_notename="$(get_by_ni "$note_folder" "$1")"
+  status=$?
+  if [ "$status" = "1" ]; then
+    echo "Error: \"$decoded_notename\" not found" >&2
+    return 1
+  elif  [ ! -d "$note_folder/$decoded_notename" ]; then
+    echo "Error: \"$decoded_notename\" isn't a directory" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
+    return 1
+  fi
+
+
   nom_housekeeping
-  nom_housekeeping_note "$1"
+  nom_housekeeping_note "$decoded_notename"
   status=$?
   if [ "$status" != "0" ]; then
    return $status
   fi
   if [ "$2" = "" ]; then
-    nom_open "$note_folder/$1/$text_name"
+    nom_open "$note_folder/$decoded_notename/$text_name"
     return 0
   fi
-  	
-  if [[ "$2" != *[!0-9]* ]]; then
-    nidcount=0
-    for tmp_file_n in $(ls "$note_folder/$1")
-    do
-      ((nidcount+=1))
-      if [ "$nidcount" = "$2" ]; then
-        nom_open "$note_folder/$1/$tmp_file_n" "$3" "$4"
-        return 0
-      fi
-    done
-    if [ -e "$note_folder/$1/$2" ]; then
-      echo "the item needs a non numeral. Try to fix it…"
-      mv "$note_folder/$1/$2" "$note_folder/$1/_$2"
-      echo "Finished"
+  decoded_name="$(get_by_ni "$note_folder/$decoded_notename" "$2")"
+  status=$?
+  if [ "$status" = "0" ] && [ -f "$note_folder/$decoded_notename/$decoded_name" ]; then
+#todo: trash
+    if [ "$decoded_name" = "$trash_name" ]; then
+      nom_open "$note_folder/$decoded_notename/$trash_name/$(ls $note_folder/$decoded_notename/$trash_name | tr "\n" "/" | sed "s|/.*$||" )" "$3" "$4"
+# / can't be in a name so use it
     else
-      echo "ID ($2) not found"
+      nom_open "$note_folder/$decoded_notename/$decoded_name" "$3" "$4"
     fi
-    return 1
-  fi
-  if [ -f "$note_folder/$1/$2" ]; then
-    nom_open "$note_folder/$1/$2" "$3" "$4"
-    return 0
-  else
-    for tmp_file_n in $(ls "$note_folder/$1")
+    return $?
+  elif [ "$status" = "1" ] || [ ! -f "$note_folder/$decoded_notename/$decoded_name" ]; then
+    for tmp_file_n in $(ls "$note_folder/$decoded_notename")
     do
-      ((nidcount+=1))
-      if echo "$tmp_file_n" | grep -q "$2"; then
-        nom_open "$note_folder/$1/$tmp_file_n" "$3" "$4"
+      if echo "$tmp_file_n" | grep -q "$decoded_name"; then
+        nom_open "$note_folder/$decoded_notename/$tmp_file_n" "$3" "$4"
         return 0
       fi
     done
-  
-    echo "File ($2) not found"
+    echo "File ($decoded_name) not found"
     return 1
-  fi  
+  elif [ "$status" = "2" ]; then
+    echo "ID ($2) not found"
+    return 2
+  fi
 }
 
 
@@ -691,70 +814,61 @@ add_note_item()
 #$1 notename, $2 item name or id
 delete_note_item()
 {
-  if [ "$1" = "" ]; then
-    echo "notename empty" >&2
+  decoded_notename="$(get_by_ni "$note_folder" "$1")"
+  status="$?"
+  if [ "$status" = "1" ]; then
+    echo "Error: \"$decoded_notename\" not found" >&2
+    return 1
+  elif  [ ! -d "$note_folder/$decoded_notename" ]; then
+    echo "Error: \"$decoded_notename\" isn't a directory" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
     return 1
   fi
+
   if [ "$2" = "" ]; then
     echo "item identifier empty" >&2
     return 1
   fi
-  if [ "$2" = "$trash_name" ]; then
-    if [ -e "$note_folder/$1/$trash_name" ]; then 
-      echo "Purge trash bin for note items…"
-      rm -r "$note_folder/$1/$trash_name"
-    else
-      echo "Trash (note items) already purged"
-    fi
-    return 0
-  fi
-  	
-  if [[ "$2" != *[!0-9]* ]]; then
-    nidcount=0
-    for tmp_file_n in $(ls "$note_folder/$1")
-    do
-      ((nidcount+=1))
-      if [ "$nidcount" = "$2" ]; then
-        [ -e "$note_folder/$1/$trash_name" ] && rm -r "$note_folder/$1/$trash_name"
-        if [ "$tmp_file_n" = "$trash_name" ]; then
-          echo "Purged trash bin for note items"
-        else
-          [ -e "$note_folder/$1/$trash_name" ] && rm -r "$note_folder/$1/$trash_name"
-          mkdir "$note_folder/$1/$trash_name"
-          mv "$note_folder/$1/$tmp_file_n" "$note_folder/$1/$trash_name"
-        fi
-        return 0
+
+  decoded_name="$(get_by_ni "$note_folder/$decoded_notename" "$2")"
+  status="$?"
+  if [ "$status" = "0" ]; then
+    if [ "$decoded_name" = "$trash_name" ]; then
+      if [ -e "$note_folder/$decoded_notename/$trash_name" ]; then 
+        echo "Purge trash bin for note items…"
+        rm -r "$note_folder/$decoded_notename/$trash_name"
+      else
+        echo "Trash (note items) already purged"
       fi
-    done  
-    echo "ID ($2) not found"
-    return 1
-  fi
-  if [ -f "$note_folder/$1/$2" ]; then
-    [ -e "$note_folder/$1/$trash_name" ] && rm -r "$note_folder/$1/$trash_name"
-    [ -e "$note_folder/$1/$trash_name" ] && rm -r "$note_folder/$1/$trash_name"
-    mkdir "$note_folder/$1/$trash_name"
-    mv "$note_folder/$1/$2" "$note_folder/$1/$trash_name"
+      return 0
+    fi
+
+    [ -e "$note_folder/$decoded_notename/$trash_name" ] && rm -r "$note_folder/$decoded_notename/$trash_name"
+    mkdir "$note_folder/$decoded_notename/$trash_name"
+    mv "$note_folder/$decoded_notename/$decoded_name" "$note_folder/$decoded_notename/$trash_name"
     return 0
-  else
-    echo "File ($2) not found"
+  elif [ "$status" = "1" ]; then
+    echo "File ($decoded_name) not found"
     local collect_string=""
-    for tmp_file_n in $(ls "$note_folder/$1")
+    for tmp_file_n in $(ls "$note_folder/$decoded_notename")
     do
-      ((nidcount+=1))
-      if echo "$tmp_file_n" | grep -q "$2"; then
+      if echo "$tmp_file_n" | grep -q "$decoded_name"; then
         collect_string="$collect_string\n$tmp_file_n"
       fi
     done
     if [ "$collect_string" != "" ]; then
-      if [[ "$(echo -e "$collect_string" | wc -l)" -le "1" ]]; then
+      if [[ "$(echo -e "$collect_string" | wc -l)" = "1" ]]; then
         echo -e "Do you meant: $(echo $collect_string | sed -e 's/^\\n//')?"
       else
         echo -e "Corrections:$collect_string"
-      fi
-      
+      fi      
     fi
     return 1
-  fi  
+  else # status=2
+    return 1
+  fi
+   
 }
 
 
@@ -764,8 +878,8 @@ if [ ! -e "$note_folder" ]; then
   mkdir "$note_folder"
 fi
 
-#rm -r "$tmp_folder"
-#mkdir -m700 "$tmp_folder"
+rm -r "$tmp_folder"
+mkdir -m700 "$tmp_folder"
 
 
 sel_option="$1"
