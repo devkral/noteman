@@ -12,6 +12,7 @@ default_cam=/dev/video0
 #scanimage -L 
 default_scan="" #<scanner name>
 
+default_audio_type=ogg
 default_picture_type=jpg
 default_container_type=webm
 
@@ -52,8 +53,8 @@ nom_screenshot()
 #  if [ "$DISPLAY" = "" ]; then
 #    
 #  else
-   #nom_screenshot_imagemagick $@
-   nom_screenshot_ffmpeg $@
+   nom_screenshot_imagemagick $@
+   #nom_screenshot_ffmpeg $@
 #  fi
 }
 
@@ -114,7 +115,7 @@ nom_camrec()
 # $1 note name, $2 save name
 nom_audiorec_ffmpeg()
 {
-  local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "ogg")"
+  local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "$default_audio_type")"
   file_exist_reserved_check "$tmp_filepath" "$note_folder/$1/$2"
   [ -e "$tmp_filepath" ] && rm "$tmp_filepath"
   #if [ "$3" != "" ]; then
@@ -299,7 +300,7 @@ filetype_override()
 {
   if ! basename "$1" | grep -q "\."; then
     echo "$1.$2"
-  elif [ "$(basename "$tmp_file_path" | sed "s/^.*\.//")" != "$2" ]; then
+  elif [ "$(basename "$1" | sed "s/^.*\.//")" != "$2" ]; then
     echo "Override filetype?" >&2
     echo "y[es] for using the new file-ending" >&2
     echo "r for replacing the wrong file-ending" >&2
@@ -676,7 +677,7 @@ case "$sel_option" in
   "remind")note_reminder $@;;
   "add")add_note_item $@;;
   "screenshot"|"screens")nom_screenshot $@;;
-  "guishot") nom_screenshot_X $@;;
+ # "guishot") nom_screenshot $@;;
  # "cmdshot") nom_screenshot_cmd $@;;
   "camshot") nom_camshot $@;;
   "camshotvlc") nom_camshot_vlc_preview $@;;
