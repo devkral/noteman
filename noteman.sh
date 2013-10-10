@@ -628,7 +628,7 @@ case "$sel_option" in
   "camshot") nom_camshot $@;;
   "camrec") nom_camrec $@;;
   "audiorec") nom_audiorec $@;;
-  "scan") nom_scan $@;;
+  "scan") nom_scan_single $@;;
   "del")delete_note_item $@;;
   "open")open_note_item $@;;
   "list")
