@@ -203,7 +203,10 @@ usage()
   echo "del <notename> <name/$trash_name>: delete note item/purge note item trash"
   echo "open <notename> <name>: open note item"
   echo "list [notename]: list note items or notes"
-  echo "remind [ <notename> <date compatible string> ]: add reminder to note/get reminders"
+  echo "remind [notename] [date compatible string]: 0 arguments: get reminders,"
+  echo "    1 argument: get reminder of note, 2 arguments: add reminder to note"
+  echo "    date string example: \"2013-2-2 23:33:11\" here: \"\" important!"
+  echo "remindtest: test date strings"
   echo "move <notename start> <notename end> <note item name>: move note item"
   echo "restore [note]: restore note/note item"
   echo "screenshot|screens <notename> <name> <delay>: Shoots a screenshot"
@@ -528,12 +531,14 @@ nom_housekeeping()
 }
 
 # -  get reminders
+#$1 date compatible string (for tests)
 #$1 notename, $2 date compatible string
 note_reminder()
 {
   if [ "$#" = "0" ]; then
-    nom_housekeeping   
-  else
+    nom_housekeeping
+    return 0
+  elif [ "$#" = "2" ]; then
     decoded_notename="$(get_by_ni "$note_folder" "$1")"
     status=$?
     if [ "$status" = "1" ]; then
@@ -553,7 +558,40 @@ note_reminder()
     else
       echo "Error: invalid note" >&2
     fi
+    return 0
+  elif [ "$#" = "1" ]; then
+    decoded_notename="$(get_by_ni "$note_folder" "$1")"
+    status=$?
+    if [ "$status" = "1" ]; then
+      echo "Error: \"$decoded_notename\" not found" >&2
+      return 1
+    elif  [ ! -d "$note_folder/$decoded_notename" ]; then
+      echo "Error: \"$decoded_notename\" isn't a directory" >&2
+      return 1
+    elif [ "$status" != "0" ]; then
+      return 1
+    fi
+    if [ -f "$note_folder/$decoded_notename/$timestamp_name" ]; then
+      echo "$(date --date="@$(cat "$note_folder/$decoded_notename/$timestamp_name")")"
+    else
+      echo "Note has no reminder"
+    fi
+    return 0
   fi
+  return 1
+}
+
+remindtest()
+{
+  echo "Test date mode. Nothing will be saved. Don't forget \"\"!"
+  echo "Normal: $(date --date="$1")"
+  echo "ISO-8601: $(date --iso-8601 --date="$1")"
+  echo "RFC-2822: $(date --rfc-2822 --date="$1")"
+  echo "RFC-3339 ?:"
+  #echo "$(date --rfc-3339 --date="$1" 2>&1)"
+  echo ""
+  local temp_time="$(date --date="$1" +%s)"
+  echo "$temp_time -> $(date --date="@$temp_time")"
 }
 
 
@@ -886,22 +924,23 @@ sel_option="$1"
 shift
 
 case "$sel_option" in
-  "addnote")add_note $@;;
-  "delnote")del_note $@;;
-  "remind")note_reminder $@;;
-  "move")move_note_item $@;;
-  "restore")restore_trash $@;;
-  "add")add_note_item $@;;
-  "screenshot"|"screens")nom_screenshot $@;;
+  "addnote")add_note "$@";;
+  "delnote")del_note "$@";;
+  "remind")note_reminder "$@";;
+  "remindtest")remindtest "$@";;
+  "move")move_note_item "$@";;
+  "restore")restore_trash "$@";;
+  "add")add_note_item "$@";;
+  "screenshot"|"screens")nom_screenshot "$@";;
  # "guishot") nom_screenshot $@;;
- # "cmdshot") nom_screenshot_cmd $@;;
-  "camshot") nom_camshot $@;;
-  "camshotvlc") nom_camshot_vlc_preview $@;;
-  "camrec") nom_camrec $@;;
-  "audiorec") nom_audiorec $@;;
-  "scan") nom_scan_single $@;;
-  "del")delete_note_item $@;;
-  "open")open_note_item $@;;
+ # "cmdshot") nom_screenshot_cmd "$@";;
+  "camshot") nom_camshot "$@";;
+  "camshotvlc") nom_camshot_vlc_preview "$@";;
+  "camrec") nom_camrec "$@";;
+  "audiorec") nom_audiorec "$@";;
+  "scan") nom_scan_single "$@";;
+  "del")delete_note_item "$@";;
+  "open")open_note_item "$@";;
   "list")
   if [ "$#" = "0" ]; then
     list_notes
