@@ -1,5 +1,5 @@
 #/usr/bin/env bash
-LICENCE: gpl3
+#LICENCE: gpl3
 
 #dependencies: bash, sane, imagemagick, ffmpeg v4l-utils
 
