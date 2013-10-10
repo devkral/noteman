@@ -811,16 +811,21 @@ open_note_item()
   fi
   decoded_name="$(get_by_ni "$note_folder/$decoded_notename" "$2")"
   status=$?
-  if [ "$status" = "0" ] && [ -f "$note_folder/$decoded_notename/$decoded_name" ]; then
-#todo: trash
-    if [ "$decoded_name" = "$trash_name" ]; then
-      nom_open "$note_folder/$decoded_notename/$trash_name/$(ls $note_folder/$decoded_notename/$trash_name | tr "\n" "/" | sed "s|/.*$||" )" "$3" "$4"
-# / can't be in a name so use it
+  if [ "$status" = "0" ]; then
+    if [ "$decoded_notename" = "$trash_name" ]; then
+      tmp_notename="$trash_name/$(ls $note_folder/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
     else
-      nom_open "$note_folder/$decoded_notename/$decoded_name" "$3" "$4"
+      tmp_notename="$decoded_notename"
     fi
+
+    if [ "$decoded_name" = "$trash_name" ]; then
+      tmp_noteitemname="$trash_name/$(ls $note_folder/$tmp_notename/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
+    else
+      tmp_noteitemname="$decoded_name"
+    fi
+    nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
     return $?
-  elif [ "$status" = "1" ] || [ ! -f "$note_folder/$decoded_notename/$decoded_name" ]; then
+  elif [ "$status" = "1" ]; then
     for tmp_file_n in $(ls "$note_folder/$decoded_notename")
     do
       if echo "$tmp_file_n" | grep -q "$decoded_name"; then
