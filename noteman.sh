@@ -25,7 +25,7 @@ tmp_folder=/tmp/$UID-noteman
 ### commands ###
 
 # $1 note name, $2 save name, $3 (optional) waittime to trigger in seconds
-nom_screenshot_X()
+nom_screenshot_imagemagick()
 {
   local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "$default_picture_type")"
   file_exist_reserved_check "$tmp_filepath" "$note_folder/$1/$2"
@@ -36,15 +36,15 @@ nom_screenshot_X()
 }
 
 # $1 note name, $2 save name, $3 (optional) waittime to trigger in seconds
-nom_screenshot_scrot()
+nom_screenshot_ffmpeg() 
 {
   local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "$default_picture_type")"
   file_exist_reserved_check "$tmp_filepath" "$note_folder/$1/$2"
-  if [ "$3" = "" ]; then
-    scrot "$tmp_filepath"
-  else
-    scrot -d "$3" "$tmp_filepath" &
+  [ -e "$tmp_filepath" ] && rm "$tmp_filepath"
+  if [ "$3" != "" ]; then
+    sleep "$3"
   fi
+  ffmpeg -loglevel warning -f x11grab -vframes 1 "$tmp_filepath"
 }
 
 nom_screenshot()
@@ -52,12 +52,27 @@ nom_screenshot()
 #  if [ "$DISPLAY" = "" ]; then
 #    
 #  else
-    nom_screenshot_X $@
-#nom_screenshot_cmd $@
+   #nom_screenshot_imagemagick $@
+   nom_screenshot_ffmpeg $@
 #  fi
 }
 
-# $1 note name, $2 save name, $3 (optional) waittime to trigger in seconds 
+# $1 note name, $2 save name
+nom_camshot_vlc_preview()
+{
+  local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "$default_picture_type")"
+  file_exist_reserved_check "$tmp_filepath" "$note_folder/$1/$2"
+  [ -e "$tmp_filepath" ] && rm "$tmp_filepath"
+  vlc "v4l://$default_cam" > /dev/null &
+  vlc_pid="$!"
+  echo "Press \"Enter\" for shot"
+  read shall_continue
+  kill "$vlc_pid"
+  ffmpeg -loglevel warning -f v4l2 -i "$default_cam" -vframes 1 "$tmp_filepath" > /dev/null
+}
+
+
+# $1 note name, $2 save name, $3 (optional) waittime to trigger in seconds
 nom_camshot_ffmpeg() 
 {
   local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "$default_picture_type")"
@@ -66,7 +81,7 @@ nom_camshot_ffmpeg()
   if [ "$3" != "" ]; then
     sleep "$3"
   fi
-  ffmpeg -f v4l2 -i "$default_cam" -vframes 1 "$tmp_filepath"
+  ffmpeg -loglevel warning -f v4l2 -i "$default_cam" -vframes 1 "$tmp_filepath"
 }
 
 
@@ -85,7 +100,8 @@ nom_camrec_ffmpeg()
   #if [ "$3" != "" ]; then
   #  sleep "$3"
   #fi
-  ffmpeg -f alsa -i pulse -f v4l2 -i /dev/video0 -acodec libvorbis -vcodec libvpx "$tmp_filepath"
+  echo "Enter q to stop recording"
+  ffmpeg -loglevel warning -f alsa -i default -f v4l2 -i /dev/video0 -acodec libvorbis -vcodec libvpx "$tmp_filepath"
 }
 
 # $1 note name, $2 save name
@@ -94,12 +110,30 @@ nom_camrec()
   nom_camrec_ffmpeg $@
 }
 
+
+# $1 note name, $2 save name
+nom_audiorec_ffmpeg()
+{
+  local tmp_filepath="$(filetype_override "$note_folder/$1/$2" "ogg")"
+  file_exist_reserved_check "$tmp_filepath" "$note_folder/$1/$2"
+  [ -e "$tmp_filepath" ] && rm "$tmp_filepath"
+  #if [ "$3" != "" ]; then
+  #  sleep "$3"
+  #fi
+  echo "Enter q to stop recording"
+  ffmpeg -loglevel warning -f alsa -i default -acodec libvorbis "$tmp_filepath"
+}
+
 # $1 note name, $2 save name
 nom_audiorec_pulse()
 {
   local tmp_filepath="$(allowed_filetypes "$note_folder/$1/$2" "wav")"
   file_exist_reserved_check "$tmp_filepath" "$note_folder/$1/$2"
-  parecord -vv -r "$tmp_filepath"
+  parecord -r "$tmp_filepath"&
+  pulserec_pid="$!"
+  echo "Press \"Enter\" to stop"
+  read shall_continue
+  kill -TERM "$pulserec_pid"
 }
 
 # $1 note name, $2 save name
@@ -107,14 +141,21 @@ nom_audiorec_alsa()
 {
   local tmp_filepath="$(allowed_filetypes "$note_folder/$1/$2" "wav")"
   file_exist_reserved_check "$tmp_filepath" "$note_folder/$1/$2"
-  arecord -vv -r -fdat "$tmp_filepath"
+  arecord -r -fdat "$tmp_filepath"&
+  alsarec_pid="$!"
+  echo "Press \"Enter\" to stop"
+  read shall_continue
+  kill -TERM "$alsarec_pid"
+
 }
 
 # $1 note name, $2 save name
 nom_audiorec()
 {
-  nom_audiorec_pulse $@
+  nom_audiorec_ffmpeg $@
+  #nom_audiorec_pulse $@
   #nom_audiorec_alsa $@
+  
 }
 
 # $1 note name, $2 save name
@@ -161,14 +202,15 @@ usage()
   echo "remind [ <notename> <date compatible string> ]: add reminder to note/look reminders"
   echo "add <notename> <name> <program> <append>: add note item Deprecate?"
   echo "screenshot|screens <notename> <name> <delay>: Shoots a screenshot"
-  echo "guishot <notename> <name> [delay]: Shoots a screenshot of the monitor"
+#  echo "guishot <notename> <name> [delay]: Shoots a screenshot of the monitor"
   #echo "cmdshot <notename> <name> [delay]: Shoots a screenshot of commandline"
   echo "camshot <notename> <name> [delay]: Shoots a picture with the default webcam"
+  echo "camshotvlc <notename <name>: Shoots a picture with vlc preview"
   echo "camrec <notename> <name>: Record (video+audio) with the default webcam"
   echo "audiorec <notename> <name>: Record only audio"
   echo "scan <notename> <name>: Scan"
   echo "delay is in seconds"
-  echo "Press q to stop recording"
+  #echo "Press q to stop recording"
 
 
 }
@@ -240,10 +282,10 @@ file_exist_reserved_check()
     exit 1
   fi
   if [ -e "$1" ]; then
-    echo "File name exists already. Override?"
+    echo "File name exists already. Overwrite?"
     local question_an
     read question_an
-    if echo "$question_an" | grep -q "y"; then 
+    if ! echo "$question_an" | grep -q "y"; then 
       exit 0
     fi
   fi
@@ -438,6 +480,7 @@ del_note()
     if [ -e "$note_folder/$trash_name" ]; then
       rm -r "$note_folder/$trash_name"
     fi
+    mkdir "$note_folder/$trash_name"
     mv "$note_folder/$1" "$note_folder/$trash_name"
   fi
 }
@@ -453,7 +496,11 @@ list_note_items()
   for tmp_file_n in $(ls "$note_folder/$1")
   do
     ((nidcount+=1))
-    echo "id $nidcount: $tmp_file_n"
+    if [ "$tmp_file_n" != "$trash_name" ]; then
+      echo "id $nidcount: $tmp_file_n"
+    else
+      echo "id $nidcount (trash): $(ls "$note_folder/$1/$trash_name" | tr "\n" " ")"
+    fi
   done
 }
 
@@ -463,7 +510,11 @@ list_notes()
   for tmp_file_n in $(ls "$note_folder")
   do
     ((nidcount+=1))
-    echo "$tmp_file_n"
+    if [ "$tmp_file_n" != "$trash_name" ]; then
+      echo "$tmp_file_n"
+    else
+      echo "(trash) $(ls "$note_folder/$trash_name" | tr "\n" " ")"
+    fi
     #echo "id $nidcount: $tmp_file_n"
   done
 }
@@ -567,6 +618,7 @@ delete_note_item()
         if [ "$tmp_file_n" = "$trash_name" ]; then
           echo "Purged trash bin for note items"
         else
+          [ -e "$note_folder/$1/$trash_name" ] && rm -r "$note_folder/$1/$trash_name"
           mkdir "$note_folder/$1/$trash_name"
           mv "$note_folder/$1/$tmp_file_n" "$note_folder/$1/$trash_name"
         fi
@@ -578,7 +630,8 @@ delete_note_item()
   fi
   if [ -f "$note_folder/$1/$2" ]; then
     [ -e "$note_folder/$1/$trash_name" ] && rm -r "$note_folder/$1/$trash_name"
-    mkdir "$note_folder/$trash_name"
+    [ -e "$note_folder/$1/$trash_name" ] && rm -r "$note_folder/$1/$trash_name"
+    mkdir "$note_folder/$1/$trash_name"
     mv "$note_folder/$1/$2" "$note_folder/$1/$trash_name"
     return 0
   else
@@ -591,7 +644,7 @@ delete_note_item()
         collect_string="$collect_string\n$tmp_file_n"
       fi
     done
-    if [ collect_string != "" ]; then
+    if [ "$collect_string" != "" ]; then
       if [[ "$(echo -e "$collect_string" | wc -l)" -le "1" ]]; then
         echo -e "Do you meant: $(echo $collect_string | sed -e 's/^\\n//')?"
       else
@@ -626,6 +679,7 @@ case "$sel_option" in
   "guishot") nom_screenshot_X $@;;
  # "cmdshot") nom_screenshot_cmd $@;;
   "camshot") nom_camshot $@;;
+  "camshotvlc") nom_camshot_vlc_preview $@;;
   "camrec") nom_camrec $@;;
   "audiorec") nom_audiorec $@;;
   "scan") nom_scan_single $@;;
