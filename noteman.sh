@@ -878,12 +878,8 @@ delete_note_item()
   status="$?"
   if [ "$status" = "0" ]; then
     if [ "$decoded_name" = "$trash_name" ]; then
-      if [ -e "$note_folder/$decoded_notename/$trash_name" ]; then 
-        echo "Purge trash bin for note items…"
-        rm -r "$note_folder/$decoded_notename/$trash_name"
-      else
-        echo "Trash (note items) already purged"
-      fi
+      echo "Purge trash bin for note items…"
+      rm -r "$note_folder/$decoded_notename/$trash_name"
       return 0
     fi
 
@@ -892,6 +888,11 @@ delete_note_item()
     mv "$note_folder/$decoded_notename/$decoded_name" "$note_folder/$decoded_notename/$trash_name"
     return 0
   elif [ "$status" = "1" ]; then
+    if [ "$decoded_name" = "$trash_name" ]; then
+      echo "Trash (note items) already purged"
+      return 0
+    fi
+
     echo "File ($decoded_name) not found"
     local collect_string=""
     for tmp_file_n in $(ls "$note_folder/$decoded_notename")
