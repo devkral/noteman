@@ -301,7 +301,7 @@ allowed_filetypes()
   if [ "$is_an_allowed_filetype" = "true" ]; then
     echo "$tmp_file_path"
   else
-    echo "$tmp_file_path.$.default_filetype"
+    echo "$tmp_file_path.$default_filetype"
   fi
 }
 
@@ -345,11 +345,11 @@ nom_housekeeping()
     fi
     if [ -e "$note_folder/$tmp_file_n/$timestamp_name" ] &&
       [[  "$(cat "$note_folder/$tmp_file_n/$timestamp_name")" -le "$(date +%s)"  ]]; then
-      reminder_string="$reminder_string\n  $tmp_file_n: $(date --date="$(cat "$note_folder/$tmp_file_n/$timestamp_name")")"
+      reminder_string="$reminder_string\n  $tmp_file_n: $(date --date="@$(cat "$note_folder/$tmp_file_n/$timestamp_name")")"
     fi
   done
   if [ "$reminder_string" != "" ]; then
-    echo -e "\033[36;1mRemind:\n\033[31;1m$(echo $reminder_string | sed -e 's/^\\n//')\033[0m\n" 
+    echo -e "\033[36;1mRemind [Now: $(date)]:\n\033[31;1m$(echo $reminder_string | sed -e 's/^\\n//')\033[0m\n" 
   fi
 }
 
