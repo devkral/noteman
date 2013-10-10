@@ -658,7 +658,7 @@ open_note_item()
     return 1
   fi
   if [ -f "$note_folder/$1/$2" ]; then
-    nom_open "$note_folder/$1/$2"
+    nom_open "$note_folder/$1/$2" "$3" "$4"
     return 0
   else
     for tmp_file_n in $(ls "$note_folder/$1")
