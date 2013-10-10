@@ -343,7 +343,7 @@ nom_housekeeping()
     if [ ! -e "$note_folder/$tmp_file_n/$text_name" ]; then
       touch "$note_folder/$tmp_file_n/$text_name"
     fi
-    if [ -e "$note_folder/$tmp_file_n/$timestamp_name" ] &&
+    if [ "$tmp_file_n" != "$trash_name" ] && [ -e "$note_folder/$tmp_file_n/$timestamp_name" ] &&
       [[  "$(cat "$note_folder/$tmp_file_n/$timestamp_name")" -le "$(date +%s)"  ]]; then
       reminder_string="$reminder_string\n  $tmp_file_n: $(date --date="@$(cat "$note_folder/$tmp_file_n/$timestamp_name")")"
     fi
