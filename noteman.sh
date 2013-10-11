@@ -789,7 +789,7 @@ open_note_item()
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
   status=$?
   if [ "$status" = "1" ]; then
-    echo "Error: \"$decoded_notename\" not found" >&2
+    echo "Error: Note \"$decoded_notename\" not found" >&2
     return 1
   elif  [ ! -d "$note_folder/$decoded_notename" ]; then
     echo "Error: \"$decoded_notename\" isn't a directory" >&2
@@ -809,14 +809,17 @@ open_note_item()
     nom_open "$note_folder/$decoded_notename/$text_name"
     return 0
   fi
-  decoded_name="$(get_by_ni "$note_folder/$decoded_notename" "$2")"
+
+  if [ "$decoded_notename" = "$trash_name" ]; then
+    tmp_notename="$trash_name/$(ls $note_folder/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
+  else
+    tmp_notename="$decoded_notename"
+  fi
+
+
+  decoded_name="$(get_by_ni "$note_folder/$tmp_notename" "$2")"
   status=$?
   if [ "$status" = "0" ]; then
-    if [ "$decoded_notename" = "$trash_name" ]; then
-      tmp_notename="$trash_name/$(ls $note_folder/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
-    else
-      tmp_notename="$decoded_notename"
-    fi
 
     if [ "$decoded_name" = "$trash_name" ]; then
       tmp_noteitemname="$trash_name/$(ls $note_folder/$tmp_notename/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
@@ -833,6 +836,7 @@ open_note_item()
         return 0
       fi
     done
+
     echo "File ($decoded_name) not found"
     return 1
   elif [ "$status" = "2" ]; then
