@@ -926,7 +926,7 @@ if [ ! -e "$note_folder" ]; then
   mkdir "$note_folder"
 fi
 
-rm -r "$tmp_folder"
+[ -e "$tmp_folder" ] && rm -r "$tmp_folder"
 mkdir -m700 "$tmp_folder"
 
 
