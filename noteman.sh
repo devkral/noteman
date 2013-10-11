@@ -517,7 +517,7 @@ nom_housekeeping()
       mv "$tmp_folder/$tmp_file_n" "$note_folder/$tmp_file_n"      
     fi
 
-    if [ ! -e "$note_folder/$tmp_file_n/$text_name" ]; then
+    if [ ! -e "$note_folder/$tmp_file_n/$text_name" ] && [ "$tmp_file_n" != "$trash_name" ]; then
       touch "$note_folder/$tmp_file_n/$text_name"
     fi
     if [ "$tmp_file_n" != "$trash_name" ] && [ -e "$note_folder/$tmp_file_n/$timestamp_name" ] &&
