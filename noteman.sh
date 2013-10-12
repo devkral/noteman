@@ -440,7 +440,7 @@ list_id_name()
 }
 
 
-# $1 filename, $2 default_fileending, $@ (optional) allowed file endings
+# $1 filename, $2 default file-type suffix, $@ (optional) allowed file endings
 file_ending()
 {
   local tmp_file="$1"
@@ -453,7 +453,7 @@ file_ending()
     return 1
   fi
   if [ "$default_filetype" = "" ]; then
-    echo "Error: Default filetype empty" >&2
+    echo "Error: default file-type suffix empty" >&2
     return 1
   fi
 
@@ -481,9 +481,9 @@ file_ending()
   fi
   if [ "$is_an_allowed_filetype" = "true" ]; then
     echo "Override filetype?" >&2
-    echo "y[es] for using the own file-ending" >&2
-    echo "r for replacing the file-ending by the default" >&2
-    echo "n for appending the default file-ending" >&2
+    echo "y[es] for using the own file-type suffix" >&2
+    echo "r for replacing the file-type suffix by the default" >&2
+    echo "n for appending the default  file-type suffix" >&2
     local question_an
     read question_an
     if echo "$question_an" | grep -q "y"; then 
@@ -495,8 +495,8 @@ file_ending()
     fi
   else
     echo "Fix filetype:" >&2
-    echo "r for replacing the wrong file-ending" >&2
-    echo "n for appending the right file-ending" >&2
+    echo "r for replacing the wrong file-type suffix" >&2
+    echo "n for appending the right file-type suffix" >&2
     local question_an
     read question_an
     if echo "$question_an" | grep -q "r"; then 
