@@ -447,6 +447,11 @@ file_ending()
   shift 1
   local default_filetype="$1"
   shift 1
+  if [ "$default_filetype" = "" ]; then
+    echo "Error: Default filetype empty" >&2
+    return 1
+  fi
+
   local tmp_file_type="$(basename "$tmp_file" | sed "s/^.*\.//")"
   local tmp_file_basename="$(basename "$tmp_file")"
   #local tmp_file_path_name="$(dirname "$tmp_file_path")/$(basename "$tmp_file_path" | sed "s/\..*$//")"
@@ -535,8 +540,12 @@ file_create_quest_new()
     shift 1
 
     tmp_noteitemname="$1"
-    shift 1 
-    decoded2_name="$(file_ending "$tmp_noteitemname" "$@")"
+    shift 1
+    if [ "$1" != "" ]; then
+      decoded2_name="$(file_ending "$tmp_noteitemname" "$@")"
+    else
+      decoded2_name="$tmp_noteitemname"
+    fi
     nonoi_create_check "$decoded_notename" "$decoded2_name" 
     status=$?
     if [ "$status" = "2" ]; then
