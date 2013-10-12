@@ -679,7 +679,7 @@ note_reminder()
       return 1
     fi
     if [ -f "$note_folder/$decoded_notename/$timestamp_name" ]; then
-      echo "$(date --date="@$(cat "$note_folder/$decoded_notename/$timestamp_name")")"
+      echo -e "\033[36;1mNote has reminder[Now: $(date)]:\n\033[31;1m$(date --date="@$(cat "$note_folder/$decoded_notename/$timestamp_name")")\033[0m"
     else
       echo "Note has no reminder"
     fi
