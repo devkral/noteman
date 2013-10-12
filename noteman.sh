@@ -440,13 +440,18 @@ list_id_name()
 }
 
 
-# $1 basefile, $2 default_fileending, $@ (optional) allowed file endings
+# $1 filename, $2 default_fileending, $@ (optional) allowed file endings
 file_ending()
 {
   local tmp_file="$1"
   shift 1
   local default_filetype="$1"
   shift 1
+  
+  if [ "$tmp_file" = "" ]; then
+    echo "Error: filename empty" >&2
+    return 1
+  fi
   if [ "$default_filetype" = "" ]; then
     echo "Error: Default filetype empty" >&2
     return 1
