@@ -417,6 +417,31 @@ get_by_ni()
   fi
 }
 
+# $1 decoded note, $2 decoded noteitem
+give_corrections()
+{
+  ! create_noteitem_test "$1" "$2" && return 1
+  local collect_string=""
+  for tmp_file_n in $(ls "$note_folder/$1")
+  do
+    if echo "$tmp_file_n" | grep -q "$2"; then
+      collect_string="$collect_string\n$tmp_file_n"
+    fi
+  done
+  collect_string="$(echo $collect_string | sed -e 's/^\\n//')"
+  if [ "$collect_string" != "" ]; then
+    if [ "$(echo -e "$collect_string" | wc -l)" = "1" ]; then
+      echo "$collect_string"
+      return 0
+    else
+      echo -e "Corrections:\n$collect_string" >&2
+      return 1
+    fi
+  else
+    echo "Error: noteitem ($2) not found" >&2
+    return 1
+  fi
+}
 
 #$1 folder
 list_id_name()
@@ -576,10 +601,10 @@ file_create_quest_new()
 create_noteitem_test()
 {
   if [ "$#" = "0" ] || [ "$1" = "" ]; then
-    echo "Error: empty note" >&2
+    echo "Error: note name/id empty" >&2
     return 1
   elif [ "$#" = "1" ] || [ "$2" = "" ]; then
-    echo "Error: empty note item" >&2
+    echo "Error: note item name/id empty" >&2
     return 1
   fi
   return 0
@@ -897,6 +922,7 @@ list_notes()
 # default: open text
 open_note_item()
 { 
+  ! create_noteitem_test "$1" "$2" && return 1
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
   status=$?
   if [ "$status" = "1" ]; then
@@ -909,13 +935,13 @@ open_note_item()
     return 1
   fi
 
-
   nom_housekeeping
   nom_housekeeping_note "$decoded_notename"
   status=$?
   if [ "$status" != "0" ]; then
    return $status
   fi
+
   if [ "$2" = "" ]; then
     nom_open "$note_folder/$decoded_notename/$text_name"
     return 0
@@ -939,18 +965,12 @@ open_note_item()
     nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
     return $?
   elif [ "$status" = "1" ]; then
-    for tmp_file_n in $(ls "$note_folder/$decoded_notename")
-    do
-      if echo "$tmp_file_n" | grep -q "$decoded_name"; then
-        nom_open "$note_folder/$decoded_notename/$tmp_file_n" "$3" "$4"
-        return 0
-      fi
-    done
-
-    echo "File ($decoded_name) not found"
-    return 1
+    collect_string="$(give_corrections "$decoded_notename" "$decoded_name")"
+    status2=$?
+    if [ "$status2" = "0" ]; then
+      nom_open "$note_folder/$decoded_notename/$collect_string" "$3" "$4"
+    fi
   elif [ "$status" = "2" ]; then
-    echo "ID ($2) not found"
     return 2
   fi
 }
@@ -980,6 +1000,7 @@ add_note_item()
 #$1 notename, $2 item name or id
 delete_note_item()
 {
+  ! create_noteitem_test "$1" "$2" && return 1
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
   status="$?"
   if [ "$status" = "1" ]; then
@@ -1016,20 +1037,11 @@ delete_note_item()
       return 0
     fi
 
-    echo "File ($decoded_name) not found"
-    local collect_string=""
-    for tmp_file_n in $(ls "$note_folder/$decoded_notename")
-    do
-      if echo "$tmp_file_n" | grep -q "$decoded_name"; then
-        collect_string="$collect_string\n$tmp_file_n"
-      fi
-    done
-    if [ "$collect_string" != "" ]; then
-      if [[ "$(echo -e "$collect_string" | wc -l)" = "1" ]]; then
-        echo -e "Do you meant: $(echo $collect_string | sed -e 's/^\\n//')?"
-      else
-        echo -e "Corrections:$collect_string"
-      fi      
+    echo "Note item \"$decoded_name\" not found"
+    collect_string="$(give_corrections "$decoded_notename" "$decoded_name")"
+    status=$?
+    if [ "$status" = "0" ]; then
+      echo -e "Do you meant: \"$collect_string\" ?"
     fi
     return 1
   else # status=2
