@@ -19,6 +19,8 @@ default_picture_type=jpg
 default_video_type=webm
 default_audio_type=ogg
 default_text_type=txt
+#should not contain . but is replaced anyway
+default_save="$(date +%F_%T)"
 
 tmp_folder=/tmp/$UID-noteman
 
@@ -232,6 +234,7 @@ fi
 #EDITOR
 
 #intern variable names, please don't change
+default_name=default
 trash_name=trash
 text_name=notetext.txt
 timestamp_name=timestamp.txt
@@ -245,7 +248,7 @@ usage()
   echo "addnote <name>: add note"
   echo "delnote <name/$trash_name>: delete note/purge note trash"
   echo "del <notename> <name/$trash_name>: delete note item/purge note item trash"
-  echo "open <notename> <name>: open note item"
+  echo "open <notename> <name/default>: open note item/default note item ($text_name)"
   echo "list [notename]: list note items or notes"
   echo "remind [notename] [date compatible string]: 0 arguments: get reminders,"
   echo "    1 argument: get reminder of note, 2 arguments: add reminder to note"
@@ -253,16 +256,18 @@ usage()
   echo "remindtest: test date strings"
   echo "move <notename start> <notename end> <note item name>: move note item"
   echo "restore [note]: restore note/note item"
-  echo "screenshot|screens <notename> <name> <delay>: Shoots a screenshot"
-#  echo "guishot <notename> <name> [delay]: Shoots a screenshot of the monitor"
-  #echo "cmdshot <notename> <name> [delay]: Shoots a screenshot of commandline"
-  echo "camshot <notename> <name> [delay]: Shoots a picture with the default webcam"
-  echo "camshotvlc <notename <name>: Shoots a picture with vlc preview"
-  echo "camrec <notename> <name>: Record (video+audio) with the default webcam"
-  echo "audiorec <notename> <name>: Record only audio"
-  echo "scan <notename> <name>: Scan"
-  echo "add <notename> <name> [<program> <append>]: add note item (text/by program)"
+  echo "screenshot|screens <notename> <name/default> <delay>: Shoots a screenshot"
+#  echo "guishot <notename> <name/default> [delay]: Shoots a screenshot of the monitor"
+  #echo "cmdshot <notename> <name/default> [delay]: Shoots a screenshot of commandline"
+  echo "camshot <notename> <name/default> [delay]: Shoots a picture with the default webcam"
+  echo "camshotvlc <notename <name/default>: Shoots a picture with vlc preview"
+  echo "camrec <notename> <name/default>: Record (video+audio) with the default webcam"
+  echo "audiorec <notename> <name/default>: Record only audio"
+  echo "scan <notename> <name/default>: Scan"
+  echo "add <notename> <name/default> [<program> <append>]: add note item (text/by program)"
+  echo "[...] optional"
   echo "delay is in seconds"
+  echo "default: open default/ save to a generated name (e.g. date)"
   #echo "Press q to stop recording"
 
 
@@ -270,7 +275,7 @@ usage()
 
 
 
-#$1 node, returns 0 on success and echos decoded note
+#$1 note, returns 0 on success and echos decoded note
 note_exist_echo()
 {
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
@@ -291,6 +296,17 @@ note_exist_echo()
   return 0
 }
 
+
+#$1 basename  returns 0 if an allowed name, not 0, hint for the rename logic to rename the item
+name_reserved_rename_check()
+{
+  if [[ $1 != *[!0-9]* ]] || [ "$1" = "$default_name" ]; then #only digits conflict with id 
+    echo "$1 is not an allowed name" >&2
+    return 1
+  fi
+  return 0
+}
+
 #$1 basename 
 name_reserved_check()
 {
@@ -300,8 +316,8 @@ name_reserved_check()
   fi
   
   if [ "$1" = "$trash_name" ] || [ "$1" = "$text_name" ] ||
-    [ "$1" = "$timestamp_name" ]; then	
-    echo "Error: Use of reserved name: $n_base_name" >&2
+    [ "$1" = "$timestamp_name" ] || [ "$1" = "$default_name" ]; then
+    echo "Error: Use of reserved name: $1" >&2
     return 1
   fi
 }
@@ -568,10 +584,12 @@ file_create_quest_new()
       return 1
     fi
     shift 1
-
     tmp_noteitemname="$1"
+    
     shift 1
-    if [ "$1" != "" ]; then
+    if [ "$tmp_noteitemname" = "$default_name" ]; then
+      decoded2_name="$(file_ending "$(echo "$default_save" | sed "s/\./,/g")" "$@")"
+    elif [ "$1" != "" ]; then
       decoded2_name="$(file_ending "$tmp_noteitemname" "$@")"
     else
       decoded2_name="$tmp_noteitemname"
@@ -736,13 +754,14 @@ nom_housekeeping_note()
   fi
   for tmp_file_n in $(ls "$note_folder/$1")
   do
-    if [[ "$tmp_file_n" != *[!0-9]* ]]; then
+    if ! name_reserved_rename_check "$tmp_file_n"; then
       local tmp_file_n_new="$tmp_file_n"
       while [ -e "$note_folder/$tmp_file_n_new" ];
       do
         tmp_file_n_new="_$tmp_file_n_new"        
       done
       mv "$note_folder/$tmp_file_n" "$note_folder/$tmp_file_n_new"
+      echo "Debug: Renamed \"$tmp_file_n\" to \"$tmp_file_n_new\"" >&2
     fi
   done
 }
@@ -922,7 +941,14 @@ list_notes()
 # default: open text
 open_note_item()
 { 
-  ! create_noteitem_test "$1" "$2" && return 1
+  if [ "$2" = "" ] || [ "$2" = "$default_name" ]; then
+    tmp_noteitem="$text_name"
+  else
+    tmp_noteitem="$2"
+  fi
+
+  ! create_noteitem_test "$1" "$tmp_noteitem" && return 1
+
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
   status=$?
   if [ "$status" = "1" ]; then
@@ -942,11 +968,6 @@ open_note_item()
    return $status
   fi
 
-  if [ "$2" = "" ]; then
-    nom_open "$note_folder/$decoded_notename/$text_name"
-    return 0
-  fi
-
   if [ "$decoded_notename" = "$trash_name" ]; then
     tmp_notename="$trash_name/$(ls $note_folder/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
   else
@@ -954,7 +975,7 @@ open_note_item()
   fi
 
 
-  decoded_name="$(get_by_ni "$note_folder/$tmp_notename" "$2")"
+  decoded_name="$(get_by_ni "$note_folder/$tmp_notename" "$tmp_noteitem")"
   status=$?
   if [ "$status" = "0" ]; then
     if [ "$decoded_name" = "$trash_name" ]; then
