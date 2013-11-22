@@ -25,6 +25,7 @@ default_text_type=txt
 default_save="$(date +%F_%T)"
 
 tmp_folder=/tmp/$UID-noteman
+default_delete_after_copy="ask"
 
 #env variables
 #NOM_NOTE_FOLDER
@@ -241,17 +242,29 @@ fi
 if [ ! -z $NOM_DEFAULT_SCAN ]; then
   default_scan="$NOM_DEFAULT_SCAN"  
 fi
+if [ ! -z $NOM_DEL_COPY ]; then
+  default_delete_after_copy="$NOM_DEL_COPY"
+fi
+
+
 #EDITOR
 
 #intern variable names, please don't change
 default_name=default
 trash_name=trash
 text_name=notetext.txt
-timestamp_name=timestamp.txt
-#mode=
+alarmclock_name=spoolalarmclock
+local_lock=local_lock
+remote_lock=remote_lock
 
 
-usage()
+
+
+#global vars
+global_lockmode="$local_lock"
+
+
+usage1()
 {
   echo "$0 <action> <options…>"
   echo "Actions:"
@@ -259,9 +272,19 @@ usage()
   echo "delnote <name/$trash_name>: delete note/purge note trash"
   echo "del <notename> <name/$trash_name>: delete note item/purge note item trash"
   echo "open <notename> <name/default>: open note item/default note item ($text_name)"
+  echo "lock <notename> [lockmode] <locktypes>: lockmode can be:"
+  echo "    $remote_lock: locks remote (ssh) access"
+  echo "    $local_lock: locks local access"
+  echo "    <empty>: locks opposite access"
+  echo "  locktypes can be (can be combined):"
+  echo "    [v]iew: neither list note nor contents"
+  echo "    [r]ead: neither allow note be read nor contents be listed"
+  echo "    [w]rite: locks write access (but not right to change permissions)"
+  echo "    [p]ermission: locks right to change permissions"
+  echo "slocks|showlocks <note>: display active locks for note"
   echo "list [notename]: list note items or notes"
-  echo "remind [notename] [date compatible string]: 0 arguments: get reminders,"
-  echo "    1 argument: get reminder of note, 2 arguments: add reminder to note"
+  echo "remind [notename] [date compatible string] [reminder message]: 0 arguments: get reminders,"
+  echo "    1 argument: get reminder of note, 2,3 arguments: add reminder to note"
   echo "    date string example: \"2013-2-2 23:33:11\" here: \"\" important!"
   echo "remindtest: test date strings"
   echo "move <notename start> <notename end> <note item name>: move note item"
@@ -276,19 +299,20 @@ usage()
   echo "scan <notename> <name/default>: Scan"
   echo "add <notename> <name/default> [<program> <append>]: add note item (text/by program)"
   echo "pick <file> <notename> [noteitem]: copy file into notefolder"
-  echo "remote_pick|rpick <file> <notename> [noteitem|""] [n]: copy file into notefolder on remote pc,n: don't ask if file should be deleted"
+  echo "remote_pick|rpick <file> <notename> [noteitem]: copy file into notefolder on remote pc"
   echo "synch  <notename> <noteitem>: transfer noteitem on other pc"
-  echo "remote: execute command on default remote pc"
+  echo "remote <noteman commands...>: control noteman on default remote pc"
   echo "[...] optional"
   echo "delay is in seconds"
   echo "default: open default/ save to a generated name (e.g. date)"
   #echo "Press q to stop recording"
-
-
+}
+usage()
+{
+  usage1 | less -XF
 }
 
-
-#$1 localfilepath, $2 notename or id, $3 (optional) item name or id or "", $4 (optional) n for removing delete dialog
+#$1 localfilepath, $2 notename or id, $3 (optional) item name or id
 remote_transfer_send()
 {
   if [ -z $remote_ssh ]; then
@@ -311,10 +335,10 @@ remote_transfer_send()
   fi
   #SSH_AUTH_SOCK="$NOM_sensitive" 
   ssh-add -t 40
-  rem_tmp_filepath="$(ssh $remote_ssh "$remote_noteman remote_file_receive \"$2\" \"$b_name\"")"
+  rem_tmp_filepath="$(ssh $remote_ssh "$remote_noteman is_runremote remote_file_receive \"$2\" \"$b_name\"")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi  
@@ -325,12 +349,7 @@ remote_transfer_send()
   #ssh-add -D
   #ssh-agent -k -a "$NOM_sensitive"
   if [ "$4" != "n" ] && [ "$status" = "0" ]; then
-    echo "Shall the file be purged? (accept with yes)" >&2
-    local question_an
-    read question_an
-    if echo "$question_an" | grep -q "yes"; then 
-      rm "$1"
-    fi
+    delete_old_file "$1"
   fi
 }
 
@@ -340,7 +359,7 @@ remote_transfer_receive()
   tmp_filepath="$(file_create_quest_new "$1" "$2")"
   status=$?
   if [ "$status" = "2" ]; then
-    exit 0
+    exit 2
   elif [ "$status" != "0" ]; then
     exit 1
   elif [ "$tmp_filepath" = "" ]; then
@@ -357,8 +376,127 @@ remote_transfer_receive()
 #$@ execute commands remote
 remote_command()
 {
-  ssh "$remote_ssh" "$remote_noteman $@"
+  ssh "$remote_ssh" "$remote_noteman is_runremote $@"
 }
+
+#$1 filepath
+delete_old_file()
+{
+  if [ "$default_delete_after_copy" = "ask" ]; then
+    echo "Shall copied file $1 be deleted?" >&2
+    local question_an
+    read question_an
+    if echo "$question_an" | grep -i -q "y"; then
+      echo "Delete $1..." >&2
+      rm "$1"
+    else
+      echo "Do nothing" >&2
+    fi
+  elif [ "$default_delete_after_copy" = "yes" ]; then
+    echo "Delete $1..." >&2
+    rm "$1"
+  fi
+}
+
+
+#$1 notename real,$2 locktype (=v,w,r) v=view, r=read,w=write
+is_locked()
+{
+  if [ "$global_lockmode" != "$remote_lock" ] && [ "$global_lockmode" != "$local_lock" ]; then
+    echo "Error: lockmode \"$global_lockmode\" incorrect" >&2
+    return 1
+  fi
+  if [ -f "$note_folder/$1/$global_lockmode" ] && grep -i -q "$2" "$note_folder/$1/$global_lockmode"; then
+    return 2
+  else
+    return 0
+  fi
+}
+#$1 note or id
+show_locks()
+{
+  decoded_notename="$(get_by_ni "$note_folder" "$1")"
+  status=$?
+  if [ "$status" = "1" ]; then
+    echo "Error: Note \"$decoded_notename\" not found" >&2
+    return 1
+  elif  [ ! -d "$note_folder/$decoded_notename" ]; then
+    echo "Error: \"$decoded_notename\" isn't a directory" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
+    return 1
+  fi
+
+  if [ ! -f "$$note_folder/$decoded_notename/$remote_lock" ] &&  [ ! -f "$$note_folder/$decoded_notename/$remote_lock" ]; then
+    echo "Note has no locks"
+  fi
+  tmp_folder_path="$note_folder/$decoded_notename/$remote_lock"
+  if [ -f "$tmp_folder_path" ]; then  
+    echo "Remote locks:"
+    grep -i -q "w" "$tmp_folder_path" && echo "  write is blocked"
+    grep -i -q "r" "$tmp_folder_path" && echo "  read is locked"
+    grep -i -q "v" "$tmp_folder_path" && echo "  visibility is locked"
+    grep -i -q "p" "$tmp_folder_path" && echo "  permission-change is locked"
+  fi
+  
+  tmp_folder_path="$note_folder/$decoded_notename/$local_lock"
+  if [ -f "$tmp_folder_path" ]; then  
+    echo "Local locks:"
+    grep -i -q "w" "$tmp_folder_path" && echo "  write is blocked"
+    grep -i -q "r" "$tmp_folder_path" && echo "  read is locked"
+    grep -i -q "v" "$tmp_folder_path" && echo "  visibility is locked"
+    grep -i -q "p" "$tmp_folder_path" && echo "  permission-change is locked"
+  fi
+}
+
+#$1 note or id, $2 (optional) $remote_lock/$local_lock lockmode ,$3 locktype (=v,w,r) v=view, r=read,w=write
+lock_down()
+{
+  tmp_lock_string=""
+  tmp_lockmode="$(echo "$remote_lock$local_lock" | sed "s/$global_lockmode//")"
+  if [ "$#" = "3" ]; then
+    if [ "$2" != "$remote_lock" ] && [ "$2" != "$local_lock" ]; then
+      echo "Error: lockmode \"$2\" incorrect" >&2
+      return 1
+    fi
+    tmp_lockmode="$2"
+    args="$3"
+  else
+    args="$2"
+  fi
+  decoded_notename="$(get_by_ni "$note_folder" "$1")"
+  status=$?
+  if [ "$status" = "1" ]; then
+    echo "Error: Note \"$decoded_notename\" not found" >&2
+    return 1
+  elif  [ ! -d "$note_folder/$decoded_notename" ]; then
+    echo "Error: \"$decoded_notename\" isn't a directory" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
+    return 1
+  fi
+
+  is_locked "$decoded_notename" "p"
+  locked_status="$?"
+  if [ "$locked_status" = "2" ]; then
+    echo "Error: no permission to change permissions"
+    return 1
+  elif [ "$locked_status" != "0" ]; then
+    return 1
+  fi
+
+  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "v")"
+  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "w")"
+  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "r")"
+  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "p")"
+  
+  if [ "${tmp_lock_string}" != "" ]; then
+    echo "${tmp_lock_string}" > "$note_folder/$decoded_notename/$tmp_lockmode"
+  else
+    rm "$note_folder/$decoded_notename/$tmp_lockmode"
+  fi
+}
+
 
 #$1 note, $2 (optional) y note creation menu, returns 0 on success and echos decoded note
 note_exist_echo()
@@ -369,9 +507,10 @@ note_exist_echo()
     echo "Note doesn't exist. Shall a note named \"$decoded_notename\" be created?" >&2
     local question_an
     read question_an
-    if ! echo "$question_an" | grep -q "y"; then 
+    if ! echo "$question_an" | grep -i -q "y"; then 
       return 2
     else
+      echo "Create note" >&2
       mkdir "$note_folder/$decoded_notename"
       if [ "$?" != "0" ]; then
         return 1
@@ -394,11 +533,10 @@ note_exist_echo()
 }
 
 
-#$1 basename  returns 0 if an allowed name, not 0, hint for the rename logic to rename the item
+#$1 basename  returns 0 if an allowed name, not 0, for housekeeping
 name_reserved_rename_check()
 {
   if [[ $1 != *[!0-9]* ]] || [ "$1" = "$default_name" ]; then #only digits conflict with id 
-    echo "$1 is not an allowed name" >&2
     return 1
   fi
   return 0
@@ -411,12 +549,18 @@ name_reserved_check()
     echo "Error: Name must contain a non-digit: $n_base_name" >&2
     return 1
   fi
-  
+  if echo "$1" | grep ";"; then # ; conflicts hard 
+    echo "Error: Name mustn't contain a ;: $n_base_name" >&2
+    return 1
+  fi
+
   if [ "$1" = "$trash_name" ] || [ "$1" = "$text_name" ] ||
-    [ "$1" = "$timestamp_name" ] || [ "$1" = "$default_name" ]; then
+    [ "$1" = "$alarmclock_name" ] || [ "$1" = "$local_lock" ] || 
+    [ "$1" = "$remote_lock" ] || [ "$1" = "$default_name" ]; then
     echo "Error: Use of reserved name: $1" >&2
     return 1
   fi
+  return 0
 }
 
 #$1 note, $2 (optional) noteitem, returns 0 if not exist, 1 if error, 2 if exists
@@ -449,6 +593,17 @@ nonoi_create_check()
   fi
 }
 
+#$1 filepath in, out renamed file
+rename_util()
+{
+  [ ! -e "$1" ] && echo "$1" && return 0
+  counter=0
+  while [ -e "$1$counter" ]
+  do
+    ((counter+=1))
+  done
+  echo "$1$counter"
+}
 
 #$1 folder $2 id  returns 0 exist, 1 not exist
 get_name_by_id()
@@ -461,16 +616,18 @@ get_name_by_id()
     return 0
   fi
   nidcount=1
-  for tmp_file_n in $(ls "$1")
+  IFS=";"
+  for tmp_file_n in $(ls --color=never "$1" | tr '\n' ';' | sed "s/;$//")
   do
-    if [ "$tmp_file_n" != "$trash_name" ] && [ "$tmp_file_n" != "$text_name" ]; then
+    if name_reserved_check "$tmp_file_n" 2> /dev/null; then
       ((nidcount+=1))
       if [ "$nidcount" = "$2" ]; then
         echo "$tmp_file_n"
         return 0
       fi
     fi
-  done  
+  done
+  IFS=" "
   echo "ID ($2) not found" >&2
   return 1
 }
@@ -486,9 +643,10 @@ get_id_by_name()
     return 0
   fi
   nidcount=1
-  for tmp_file_n in $(ls "$1")
+  IFS=";"
+  for tmp_file_n in $(ls --color=never -1 "$1" | tr '\n' ';' | sed "s/;$//")
   do
-    if [ "$tmp_file_n" != "$trash_name" ] && [ "$tmp_file_n" != "$text_name" ]; then
+    if name_reserved_check "$tmp_file_n" 2> /dev/null; then
       ((nidcount+=1))
       if [ "$tmp_file_n" = "$2" ]; then
         echo "$nidcount"
@@ -496,9 +654,44 @@ get_id_by_name()
       fi
     fi
   done
+  IFS=" "
   echo "Name ($2) not found" >&2
   return 1
 }
+
+
+#$1 folder
+list_id_name()
+{
+#no check if invisible because trash should be always visible
+  if [ -e "$1/$trash_name" ]; then
+    echo "id 0: $trash_name"
+    echo "Trash contains: $(ls "$1/$trash_name" | tr "\n" " ")"
+  fi
+  if  [ -e "$1/$text_name" ]; then
+    echo "id 1: $text_name"
+  fi
+  nidcount=1
+  IFS=";"
+  for tmp_file_n in $(ls --color=never "$1" | tr '\n' ';' | sed "s/;$//")
+  do
+    if name_reserved_check "$tmp_file_n" 2> /dev/null; then
+      ((nidcount+=1))
+      if [ -d "$note_folder/$tmp_file_n" ]; then
+        is_locked "$tmp_file_n" "v"
+        locked_status="$?"
+        if [ "$locked_status" != "2" ]; then
+          echo "id $nidcount: $tmp_file_n"
+        fi
+      else
+        echo "id $nidcount: $tmp_file_n"
+      fi
+    fi
+  done
+  IFS=" "
+  return 0
+}
+
 
 #$1 folder, $2 name/id  returns 0 exist, 1 not exist 2 id not exist/empty
 get_by_ni()
@@ -537,7 +730,8 @@ give_corrections()
   local collect_string=""
   for tmp_file_n in $(ls "$note_folder/$1")
   do
-    if echo "$tmp_file_n" | grep -q "$2"; then
+#secure against script kiddies (against completing a reserved name e.g. local_lock)
+    if name_reserved_check "$tmp_file_n" 2> /dev/null && echo "$tmp_file_n" | grep -q "$2"; then
       collect_string="$collect_string\n$tmp_file_n"
     fi
   done
@@ -556,26 +750,7 @@ give_corrections()
   fi
 }
 
-#$1 folder
-list_id_name()
-{
-  if [ -e "$1/$trash_name" ]; then
-    echo "id 0: $trash_name"
-    echo "Trash contains: $(ls "$1/$trash_name" | tr "\n" " ")"
-  fi
-  if  [ -e "$1/$text_name" ]; then
-    echo "id 1: $text_name"
-  fi
-  nidcount=1
-  for tmp_file_n in $(ls "$1")
-  do
-    if [ "$tmp_file_n" != "$trash_name" ] && [ "$tmp_file_n" != "$text_name" ]; then
-      ((nidcount+=1))
-      echo "id $nidcount: $tmp_file_n"
-    fi
-  done
-  return 0
-}
+
 
 
 # $1 filename, $2 default file-type suffix, $@ (optional) allowed file endings
@@ -624,22 +799,27 @@ file_ending()
     echo "n for appending the default  file-type suffix" >&2
     local question_an
     read question_an
-    if echo "$question_an" | grep -q "y"; then 
+    if echo "$question_an" | grep -i -q "y"; then
+      echo "Use given file-type suffix" >&2
       echo "$tmp_file"
-    elif echo "$question_an" | grep -q "r"; then 
+    elif echo "$question_an" | grep -i -q "r"; then
+      echo "Use default file-type suffix" >&2
       echo "$tmp_file_basename.$default_filetype"
     else
+      echo "Append right file-type suffix" >&2
       echo "$tmp_file.$default_filetype"
     fi
   else
     echo "Fix filetype:" >&2
     echo "r for replacing the wrong file-type suffix" >&2
-    echo "n for appending the right file-type suffix" >&2
+    echo "n for appending the right file-type suffix [default]" >&2
     local question_an
     read question_an
-    if echo "$question_an" | grep -q "r"; then 
+    if echo "$question_an" | grep -q "r"; then
+      echo "Replace suffix" >&2 
       echo "$tmp_file_basename.$default_filetype"
     else
+      echo "Append suffix" >&2
       echo "$tmp_file.$default_filetype"
     fi
   fi
@@ -658,17 +838,27 @@ file_create_quest_new()
     nonoi_create_check "$1"
     status=$?
     if [ "$status" = "2" ]; then
-      return 2
-#don't offer such a dangerous option
-      #echo "File name exists already. Overwrite?" >&2
-      #local question_an
-      #read question_an
-      #if ! echo "$question_an" | grep -q "y"; then 
-      #  return 2
-      #else
-      #  rm -r "$note_folder/$1" 
-      #  echo "$note_folder/$1"
-      #fi    
+      echo "Note exists already. [M]ove old? [R]ename new? [Over]write (DANGER!)?  abort (default) " >&2
+      local question_an
+      read question_an
+      if echo "$question_an" | grep -i -q "over"; then
+        echo "Overwrite..." >&2
+        rm -r "$note_folder/$1"
+        echo "$note_folder/$1"
+        return 0
+      elif echo "$question_an" | grep -i -q "m"; then
+        echo "Move old..." >&2
+        mv "$note_folder/$1" "$(rename_util "$note_folder/${1}old")"
+        echo "$note_folder/$1"
+        return 0
+      elif echo "$question_an" | grep -i -q "r"; then
+        echo "Rename new..." >&2
+        echo "$(rename_util "$note_folder/${1}new")"
+        return 0
+      else
+        echo "Do nothing" >&2
+        return 2
+      fi
     elif [ "$status" != "0" ]; then
       return 1
     else
@@ -681,6 +871,14 @@ file_create_quest_new()
     decoded_notename="$(note_exist_echo "$1" "y")"
     status=$?
     if [ "$status" != "0" ]; then
+      return 1
+    fi
+    is_locked "$decoded_notename" "w"
+    status=$?
+    if [ "$status" = "2" ]; then
+      echo "Error: write permission is locked" >&2
+      return 1
+    elif [ "$status" != "0" ]; then
       return 1
     fi
     shift 1
@@ -697,14 +895,26 @@ file_create_quest_new()
     nonoi_create_check "$decoded_notename" "$decoded2_name" 
     status=$?
     if [ "$status" = "2" ]; then
-      echo "File name exists already. Overwrite?" >&2
+      echo "File exists already. [O]verwrite? [M]ove old? [R]ename new? abort (default)" >&2
       local question_an
       read question_an
-      if ! echo "$question_an" | grep -q "y"; then 
-        return 2
-      else
+      if echo "$question_an" | grep -i -q "o"; then
+        echo "Overwrite..." >&2 
         rm -r "$note_folder/$decoded_notename/$decoded2_name"
         echo "$note_folder/$decoded_notename/$decoded2_name"
+        return 0
+      elif echo "$question_an" | grep -i -q "m"; then
+        echo "Move old..." >&2
+        mv "$note_folder/$decoded_notename/$decoded2_name" "$(rename_util "$note_folder/$decoded_notename/${decoded2_name}old")"
+        echo "$note_folder/$1"
+        return 0
+      elif echo "$question_an" | grep -i -q "r"; then
+        echo "Rename new..." >&2
+        echo "$(rename_util "$note_folder/$decoded_notename/${decoded2_name}new")"
+        return 0
+      else
+        echo "Do nothing" >&2
+        return 2
       fi
     elif [ "$status" != "0" ]; then
       return 1
@@ -752,8 +962,10 @@ nom_housekeeping()
   local reminder_string=""
   for tmp_file_n in $(ls "$note_folder")
   do
-    if [[ "$tmp_file_n" != *[!0-9]* ]]; then
+    if [[ "$tmp_file_n" != *[!0-9]* ]] || 
+  echo "$tmp_file_n" | grep ";"; then
       local tmp_file_n_new="$tmp_file_n"
+      tmp_file_n_new="$(echo "$tmp_file_n_new" | sed "s/;/,/g")"
       while [ -e "$note_folder/$tmp_file_n_new" ];
       do
         tmp_file_n_new="_$tmp_file_n_new"        
@@ -771,9 +983,14 @@ nom_housekeeping()
     if [ ! -e "$note_folder/$tmp_file_n/$text_name" ] && [ "$tmp_file_n" != "$trash_name" ]; then
       touch "$note_folder/$tmp_file_n/$text_name"
     fi
-    if [ "$tmp_file_n" != "$trash_name" ] && [ -e "$note_folder/$tmp_file_n/$timestamp_name" ] &&
-      [[  "$(cat "$note_folder/$tmp_file_n/$timestamp_name")" -le "$(date +%s)"  ]]; then
-      reminder_string="$reminder_string\n  $tmp_file_n: $(date --date="@$(cat "$note_folder/$tmp_file_n/$timestamp_name")")"
+    is_locked "$tmp_file_n" "v"
+    status_locked=$?
+    is_locked "$tmp_file_n" "r"
+    status_lockedread=$?
+
+    if [ "$tmp_file_n" != "$trash_name" ] && [ -e "$note_folder/$tmp_file_n/$alarmclock_name" ] && [ "$status_locked" != "2" ] &&
+  [ "$status_lockedread" != "2" ] &&  [[  "$(sed "s/:.*$//" "$note_folder/$tmp_file_n/$alarmclock_name")" -le "$(date +%s)"  ]]; then
+      reminder_string="$reminder_string\n  $tmp_file_n: $(date --date="@$(sed "s/:.*$//" "$note_folder/$tmp_file_n/$alarmclock_name")"): $(sed "s/^[^:]*://" "$note_folder/$tmp_file_n/$alarmclock_name")"
     fi
   done
   if [ "$reminder_string" != "" ]; then
@@ -782,14 +999,14 @@ nom_housekeeping()
 }
 
 # -  get reminders
-#$1 date compatible string (for tests)
-#$1 notename, $2 date compatible string
+#$1 notename: get reminder
+#$1 notename, $2 date compatible string, $3(optional) message
 note_reminder()
 {
   if [ "$#" = "0" ]; then
     nom_housekeeping
     return 0
-  elif [ "$#" = "2" ]; then
+  elif [ "$#" -gt "2" ]; then
     decoded_notename="$(get_by_ni "$note_folder" "$1")"
     status=$?
     if [ "$status" = "1" ]; then
@@ -804,7 +1021,7 @@ note_reminder()
     
     if [ -d "$note_folder/$decoded_notename" ]; then
       local temp_time="$(date --date="$2" +%s)"
-      echo "$temp_time" > "$note_folder/$decoded_notename/$timestamp_name"
+      echo "$temp_time: $3" > "$note_folder/$decoded_notename/$alarmclock_name"
       date --date="@$temp_time"
     else
       echo "Error: invalid note" >&2
@@ -822,8 +1039,16 @@ note_reminder()
     elif [ "$status" != "0" ]; then
       return 1
     fi
-    if [ -f "$note_folder/$decoded_notename/$timestamp_name" ]; then
-      echo -e "\033[36;1mNote has reminder[Now: $(date)]:\n\033[31;1m$(date --date="@$(cat "$note_folder/$decoded_notename/$timestamp_name")")\033[0m"
+    is_locked "$decoded_notename" "r"
+    locked_status="$?"
+    if [ "$locked_status" = "2" ]; then
+      echo "Error: reading is locked" >&2
+      return 1
+    elif [ "$locked_status" != "0" ]; then
+      return 1
+    fi
+    if [ -f "$note_folder/$decoded_notename/$alarmclock_name" ]; then
+      echo -e "\033[36;1mNote has reminder[Now: $(date)]:\n\033[31;1m$(date --date="@$(sed "s/:.*$//" "$note_folder/$decoded_notename/$alarmclock_name")"): $(sed "s/^[^:]*://" "$note_folder/$decoded_notename/$alarmclock_name")\033[0m"
     else
       echo "Note has no reminder"
     fi
@@ -858,13 +1083,9 @@ nom_housekeeping_note()
   for tmp_file_n in $(ls "$note_folder/$1")
   do
     if ! name_reserved_rename_check "$tmp_file_n"; then
-      local tmp_file_n_new="$tmp_file_n"
-      while [ -e "$note_folder/$tmp_file_n_new" ];
-      do
-        tmp_file_n_new="_$tmp_file_n_new"        
-      done
-      mv "$note_folder/$tmp_file_n" "$note_folder/$tmp_file_n_new"
-      echo "Debug: Renamed \"$tmp_file_n\" to \"$tmp_file_n_new\"" >&2
+      tmp_corrected_path="$(rename_util "$note_folder/$(echo "$tmp_file_n" | sed "s/;/,/g")")"
+      mv "$note_folder/$tmp_file_n" "$tmp_corrected_path)"
+      echo "Debug: Renamed \"$tmp_file_n\" to \"$tmp_corrected_path\"" >&2
     fi
   done
 }
@@ -904,9 +1125,23 @@ move_note_item()
   elif [ "$status" != "0" ]; then
     return 1
   fi
+
+  is_locked "$decoded_notenamesrc" "r"
+  locked_status="$?"
+  if [ "$locked_status" = "2" ]; then
+    echo "Error: no read permission" >&2
+    return 1
+  fi
+
+  is_locked "$decoded_notenamedest" "w"
+  locked_status="$?"
+  if [ "$locked_status" = "2" ]; then
+    echo "Error: no write permission" >&2
+    return 1
+  fi
   
   if [ "$decoded_name" != "$text_name" ]; then
-    decoded_path="$(file_create_quest_new "$decoded_notename" "$decoded_name")"
+    decoded_path="$(file_create_quest_new "$decoded_notenamedest" "$decoded_name")"
     status=$?
     if [ "$status" = "2" ]; then
       return 0
@@ -923,12 +1158,14 @@ move_note_item()
 #$1 (optional) notename
 restore_trash()
 {
+  tmp_trash_item=""
   if [ "$1" = "" ]; then
-    if [ ! -d "$note_folder/$trash_name" ] ||  [ "$(ls "$note_folder/$trash_name" | wc -l)" = "0" ]; then
+    [ -d "$note_folder/$trash_name" ] &&  tmp_trash_item="$(ls "$note_folder/$trash_name")"
+    if [ "$tmp_trash_item" = "" ]; then
       echo "Note trash is empty"
       return 0 
-    elif [ "$(ls "$note_folder/$trash_name" | wc -l)" = "1" ]; then
-      decoded_path="$(file_create_quest_new "$(ls "$note_folder/$trash_name")")"
+    elif [ "$(echo "$tmp_trash_item" | wc -l)" = "1" ]; then
+      decoded_path="$(file_create_quest_new "$tmp_trash_item")"
       status=$?
       if [ "$status" = "2" ] ; then
         return 0
@@ -936,7 +1173,7 @@ restore_trash()
         return 1
       fi
 
-      mv "$note_folder/$trash_name/$(ls "$note_folder/$trash_name")" "$note_folder/"
+      mv "$note_folder/$trash_name/$tmp_trash_item" "$decoded_path"
       rm -r "$note_folder/$trash_name/"
       return 0
     else
@@ -952,18 +1189,25 @@ restore_trash()
     elif [ "$status" != "0" ]; then
       return 1
     fi
-    if [ ! -d "$note_folder/$decoded_notename/$trash_name" ] ||  [ "$(ls "$note_folder/$decoded_notename/$trash_name" | wc -l)" = "0" ]; then
+    is_locked "$decoded_notename" "w"
+    locked_status="$?"
+    if [ "$locked_status" = "2" ]; then
+      echo "Error: no permission to write" >&2
+      return 1
+    fi
+    [ -d "$note_folder/$decoded_notename/$trash_name" ] && tmp_trash_item="$(ls "$note_folder/$decoded_notename/$trash_name")"
+    if [ "$tmp_trash_item" = "" ]; then
       echo "Note item trash is empty"
       return 0
-    elif [ "$(ls "$note_folder/$decoded_notename/$trash_name" | wc -l)" = "1" ]; then
-      decoded_path="$(file_create_quest_new "$decoded_notename" "$(ls "$note_folder/$decoded_notename/$trash_name")")"
+    elif [ "$(echo "$tmp_trash_item" | wc -l)" = "1" ]; then
+      decoded_path="$(file_create_quest_new "$decoded_notename" "$tmp_trash_item")"
       status=$?
       if [ "$status" = "2" ]; then
         return 0
       elif [ "$status" != "0" ]; then
         return 1
       fi
-      mv "$note_folder/$decoded_notename/$trash_name/$(ls "$note_folder/$1/$trash_name")" "$decoded_path"
+      mv "$note_folder/$decoded_notename/$trash_name/$tmp_trash_item" "$decoded_path"
       rm -r "$note_folder/$decoded_notename/$trash_name/"
       return 0
     else
@@ -985,6 +1229,7 @@ add_note()
   elif [ "$status" != "0" ] ; then
     return 1
   fi
+
   mkdir "$decoded_path"
   touch "$decoded_path/$text_name"
   return 0
@@ -1010,6 +1255,12 @@ del_note()
     echo "Purge trash bin for notes"
     rm -r "$note_folder/$trash_name"
   else
+    is_locked "$decoded_notename" "w"
+    locked_status="$?"
+    if [ "$locked_status" = "2" ]; then
+      echo "Error: no permission to delete (write permission)" >&2
+      return 1
+    fi
     if [ -e "$note_folder/$trash_name" ]; then
       rm -r "$note_folder/$trash_name"
     fi
@@ -1030,6 +1281,19 @@ list_note_items()
     echo "Error: \"$decoded_notename\" isn't a directory" >&2
     return 1
   elif [ "$status" != "0" ]; then
+    return 1
+  fi
+
+
+  is_locked "$decoded_notename" "v"
+  locked_status="$?"
+  if [ "$locked_status" = "2" ]; then
+    return 0
+  fi
+  is_locked "$decoded_notename" "r"
+  locked_status="$?"
+  if [ "$locked_status" = "2" ]; then
+    echo "Error: reading is blocked" >&2
     return 1
   fi
   list_id_name "$note_folder/$decoded_notename"
@@ -1076,10 +1340,28 @@ open_note_item()
   else
     tmp_notename="$decoded_notename"
   fi
-
+  is_locked "$tmp_notename" "r"
+  locked_status="$?"
+  if [ "$locked_status" = "2" ]; then
+    echo "Error: reading is locked" >&2
+    return 1
+  elif [ "$locked_status" != "0" ]; then
+    return 1
+  fi
 
   decoded_name="$(get_by_ni "$note_folder/$tmp_notename" "$tmp_noteitem")"
   status=$?
+  if [ "$decoded_name" = "$local_lock" ] || [ "$decoded_name" = "$remote_lock" ]; then
+    is_locked "$decoded_notename" "p"
+    locked_status="$?"
+    if [ "$locked_status" = "2" ]; then
+      echo "Error: no permission to change permissions" >&2
+      return 1
+    elif [ "$locked_status" != "0" ]; then
+      return 1
+    fi
+  fi
+  
   if [ "$status" = "0" ]; then
     if [ "$decoded_name" = "$trash_name" ]; then
       tmp_noteitemname="$trash_name/$(ls $note_folder/$tmp_notename/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
@@ -1087,7 +1369,7 @@ open_note_item()
       tmp_noteitemname="$decoded_name"
     fi
     nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
-    return $?
+    return "$?"
   elif [ "$status" = "1" ]; then
     collect_string="$(give_corrections "$decoded_notename" "$decoded_name")"
     status2=$?
@@ -1106,8 +1388,7 @@ open_note_item()
 add_note_item()
 {
   
-
-  decoded_path="$(file_create_quest_new "$1" "$2" "$default_text_type")"
+  decoded_path="$(file_create_quest_new "$1" "$2")" # "$default_text_type")"
   status=$?
   if [ "$status" = "2" ] ; then
     return 0
@@ -1143,6 +1424,17 @@ delete_note_item()
 
   decoded_name="$(get_by_ni "$note_folder/$decoded_notename" "$2")"
   status="$?"
+  if [ "$decoded_name" = "$local_lock" ] || [ "$decoded_name" = "$remote_lock" ]; then
+    is_locked "$decoded_notename" "p"
+    locked_status="$?"
+    if [ "$locked_status" = "2" ]; then
+      echo "Error: no permission to change permissions" >&2
+      return 1
+    elif [ "$locked_status" != "0" ]; then
+      return 1
+    fi
+  fi
+
   if [ "$status" = "0" ]; then
     if [ "$decoded_name" = "$trash_name" ]; then
       echo "Purge trash bin for note items…"
@@ -1183,23 +1475,17 @@ pick_file()
   tmp_filepath="$(file_create_quest_new "$2" "$b_name")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
   cp "$1" "$tmp_filepath"
-  echo "Shall the file be purged? (accept with yes)" >&2
-  local question_an
-  read question_an
-  if echo "$question_an" | grep -q "yes"; then 
-    rm "$1"
-  fi    
+  delete_old_file "$1"    
 }
 
-#source: $1 notename or id, $2 noteitemname or id, $3 (optional) remote
+#source: $1 notename or id, $2 noteitemname or id
 synchronize()
 {
-
   ! create_noteitem_test "$1" "$2" && return 1
 
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
@@ -1213,31 +1499,36 @@ synchronize()
   elif [ "$status" != "0" ]; then
     return 1
   fi
-
+  is_locked "$decoded_notename" "r"
+  locked_status="$?"
+  if [ "$locked_status" = "2" ]; then
+    echo "Error: reading is locked" >&2
+    return 1
+  elif [ "$locked_status" != "0" ]; then
+    return 1
+  fi
 
   decoded_name="$(get_by_ni "$note_folder/$decoded_notename" "$2")"
   status=$?
   if [ "$status" = "0" ]; then
-    remote_transfer_send "$note_folder/$decoded_notename/$decoded_name" "$decoded_notename" "" "y"
+    remote_transfer_send "$note_folder/$decoded_notename/$decoded_name" "$decoded_notename"
     status2=$?
     if [ "$status2" = "2" ]; then
-       #todo
-      return 2
+      return 0
     elif [ "$status2" != "0" ]; then
-#todo
       return 1
     fi
   elif [ "$status" = "1" ]; then
-    echo "Error: Note \"$decoded_name\" not found" >&2
+    echo "Error: Note item \"$decoded_name\" not found" >&2
     return 1
   else
     return 1
   fi
-  
 }
 
 
 #main
+
 
 if [ ! -e "$note_folder" ]; then
   mkdir "$note_folder"
@@ -1246,6 +1537,11 @@ fi
 [ -e "$tmp_folder" ] && rm -r "$tmp_folder"
 mkdir -m700 "$tmp_folder"
 
+
+if [ "$1" = "is_runremote" ]; then
+  global_lockmode="$remote_lock"
+  shift 1
+fi
 
 sel_option="$1"
 shift
@@ -1269,13 +1565,15 @@ case "$sel_option" in
   "del")delete_note_item "$@";;
   "open")open_note_item "$@";;
   "pick")pick_file "$@";;
+  "lock")lock_down "$@";;
+  "slocks"|"showlocks")show_locks "$@";;
   "remote_pick"|"rpick")remote_transfer_send "$@";;
   "synch"|"synchronize")synchronize "$@";;
   "remote_file_receive")
 temp11="$1"
 temp12="$2"
 shift 2
-remote_transfer_receive "$temp11" "$temp12" "$*";;
+remote_transfer_receive "$temp11" "$temp12" "$@";;
   "remote") remote_command "$@";;
   "list")
   if [ "$#" = "0" ]; then
