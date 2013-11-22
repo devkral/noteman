@@ -373,7 +373,7 @@ note_exist_echo()
       return 2
     else
       mkdir "$note_folder/$decoded_notename"
-      if [ "$?" = "0" ]; then
+      if [ "$?" != "0" ]; then
         return 1
       fi
     fi
@@ -678,9 +678,8 @@ file_create_quest_new()
 
   else
     ! create_noteitem_test "$1" "$2" && return 1
-    decoded_notename="$(note_exist_echo "$1" y)"
+    decoded_notename="$(note_exist_echo "$1" "y")"
     status=$?
-#todo: note creation menu
     if [ "$status" != "0" ]; then
       return 1
     fi
@@ -1174,14 +1173,14 @@ delete_note_item()
    
 }
 
-#$1 filepath, $2 notename or id, $3 noteitem
+#$1 filepath, $2 notename or id, $3 (optional) noteitem
 pick_file()
 {
   b_name="$(basename "$1")"
   if [ "$#" = "3" ]; then
     b_name="$3"
   fi
-  local tmp_filepath="$(file_create_quest_new "$2" "$b_name" "$default_picture_type")"
+  tmp_filepath="$(file_create_quest_new "$2" "$b_name")"
   status=$?
   if [ "$status" = "2" ]; then
     return 2
