@@ -7,6 +7,8 @@
 ###variables###
 
 note_folder=~/Notes
+remote_ssh=
+remote_noteman="noteman"
 default_diffprogram=vimdiff
 
 default_cam=/dev/video0
@@ -28,6 +30,8 @@ tmp_folder=/tmp/$UID-noteman
 #NOM_NOTE_FOLDER
 #NOM_DEFAULT_CAM
 #NOM_DEFAULT_SCAN
+#NOM_REMOTE_SSH
+#NOM_REMOTE_NOTEMAN
 
 ### commands ###
 
@@ -225,6 +229,12 @@ nom_scan_single()
 if [ ! -z $NOM_NOTE_FOLDER ]; then
   note_folder="$NOM_NOTE_FOLDER"
 fi
+if [ ! -z $NOM_REMOTE_SSH ]; then
+  remote_ssh="$NOM_REMOTE_SSH"
+fi
+if [ ! -z $NOM_REMOTE_NOTEMAN ]; then
+  remote_noteman="$NOM_REMOTE_NOTEMAN"
+fi
 if [ ! -z $NOM_DEFAULT_CAM ]; then
   default_cam="$NOM_DEFAULT_CAM"  
 fi
@@ -265,6 +275,10 @@ usage()
   echo "audiorec <notename> <name/default>: Record only audio"
   echo "scan <notename> <name/default>: Scan"
   echo "add <notename> <name/default> [<program> <append>]: add note item (text/by program)"
+  echo "pick <file> <notename> [noteitem]: copy file into notefolder"
+  echo "remote_pick|rpick <file> <notename> [noteitem|""] [n]: copy file into notefolder on remote pc,n: don't ask if file should be deleted"
+  echo "synch  <notename> <noteitem>: transfer noteitem on other pc"
+  echo "remote: execute command on default remote pc"
   echo "[...] optional"
   echo "delay is in seconds"
   echo "default: open default/ save to a generated name (e.g. date)"
@@ -274,14 +288,97 @@ usage()
 }
 
 
+#$1 localfilepath, $2 notename or id, $3 (optional) item name or id or "", $4 (optional) n for removing delete dialog
+remote_transfer_send()
+{
+  if [ -z $remote_ssh ]; then
+    echo "Error: remote_ssh has not been set" >&2
+    return 1
+  elif [ -z $remote_noteman ]; then
+    echo "Error: remote_noteman has not been set" >&2
+    return 1
+  fi
 
-#$1 note, returns 0 on success and echos decoded note
+  if [ "$3" = "" ]; then
+    b_name="$(basename "$1")"
+  else
+    b_name="$3"
+  fi
+  #RANDOM="$(date +%s)"
+  #NOM_sensitive="$tmp_folder/nomsend$RANDOM"
+  if ! ps -C "ssh-agent" &> /dev/null ; then
+    ssh-agent 2> /dev/null #-a "$NOM_sensitive"
+  fi
+  #SSH_AUTH_SOCK="$NOM_sensitive" 
+  ssh-add -t 40
+  rem_tmp_filepath="$(ssh $remote_ssh "$remote_noteman remote_file_receive \"$2\" \"$b_name\"")"
+  status=$?
+  if [ "$status" = "2" ]; then
+    return 2
+  elif [ "$status" != "0" ]; then
+    return 1
+  fi  
+  #SSH_AUTH_SOCK="$NOM_sensitive"
+  scp "$1" "$remote_ssh:$rem_tmp_filepath"
+  status=$?
+  #SSH_AUTH_SOCK="$NOM_sensitive" 
+  #ssh-add -D
+  #ssh-agent -k -a "$NOM_sensitive"
+  if [ "$4" != "n" ] && [ "$status" = "0" ]; then
+    echo "Shall the file be purged?" >&2
+    local question_an
+    read question_an
+    if echo "$question_an" | grep -q "y"; then 
+      rm "$1"
+    fi
+  fi
+}
+
+#$1 notename or id, $2 item name
+remote_transfer_receive()
+{
+  tmp_filepath="$(file_create_quest_new "$1" "$2")"
+  status=$?
+  if [ "$status" = "2" ]; then
+    exit 0
+  elif [ "$status" != "0" ]; then
+    exit 1
+  elif [ "$tmp_filepath" = "" ]; then
+    echo "Fatal Error: filepath empty and not status!=0, status $status" >&2
+    exit 1
+  fi
+  #mv "$tmpfolder_bad/baddidea" "$tmp_filepath"
+  exit 0
+
+#  echo ""tar -cf - source_dir | 
+#ssh user@desktop 'cat > dest.tar'
+}
+
+#$@ execute commands remote
+remote_command()
+{
+  ssh "$remote_ssh" "$remote_noteman $@"
+}
+
+#$1 note, $2 (optional) y note creation menu, returns 0 on success and echos decoded note
 note_exist_echo()
 {
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
   status="$?"
-  if [ "$status" = "1" ]; then
-    echo "Error: \"$decoded_notename\" not found" >&2
+  if [ "$status" = "1" ] && [ "$2" = "y" ]; then
+    echo "Note doesn't exist. Shall a note named \"$decoded_notename\" be created?" >&2
+    local question_an
+    read question_an
+    if ! echo "$question_an" | grep -q "y"; then 
+      return 2
+    else
+      mkdir "$note_folder/$decoded_notename"
+      if [ "$?" = "0" ]; then
+        return 1
+      fi
+    fi
+  elif [ "$status" = "1" ]; then
+    echo "Error: note \"$decoded_notename\" not found" >&2
     return 1
   elif  [ ! -e "$note_folder/$decoded_notename" ] && [ ! -e "$note_folder/$trash_name/$decoded_notename" ]; then
     echo "Error: \"$decoded_notename\" isn't a note" >&2
@@ -556,19 +653,22 @@ file_create_quest_new()
 {
   if [ "$#" = "0" ]; then
     echo "Error: note empty" >&2
+    return 1
   elif [ "$#" = "1" ]; then
     nonoi_create_check "$1"
     status=$?
     if [ "$status" = "2" ]; then
-      echo "File name exists already. Overwrite?" >&2
-      local question_an
-      read question_an
-      if ! echo "$question_an" | grep -q "y"; then 
-        return 2
-      else
-        rm -r "$note_folder/$1" 
-        echo "$note_folder/$1"
-      fi    
+      return 2
+#don't offer such a dangerous option
+      #echo "File name exists already. Overwrite?" >&2
+      #local question_an
+      #read question_an
+      #if ! echo "$question_an" | grep -q "y"; then 
+      #  return 2
+      #else
+      #  rm -r "$note_folder/$1" 
+      #  echo "$note_folder/$1"
+      #fi    
     elif [ "$status" != "0" ]; then
       return 1
     else
@@ -578,8 +678,9 @@ file_create_quest_new()
 
   else
     ! create_noteitem_test "$1" "$2" && return 1
-    decoded_notename="$(note_exist_echo "$1")"
+    decoded_notename="$(note_exist_echo "$1" y)"
     status=$?
+#todo: note creation menu
     if [ "$status" != "0" ]; then
       return 1
     fi
@@ -613,6 +714,7 @@ file_create_quest_new()
       return 0
     fi
   fi
+  return 1
 }
 
 #$1 note, $2 note item
@@ -743,6 +845,8 @@ remindtest()
   local temp_time="$(date --date="$1" +%s)"
   echo "$temp_time -> $(date --date="@$temp_time")"
 }
+
+
 
 
 # $1 note
@@ -1017,7 +1121,6 @@ add_note_item()
   nom_open "$decoded_path" "$3" "$4"
 }
 
-
 #$1 notename, $2 item name or id
 delete_note_item()
 {
@@ -1071,6 +1174,69 @@ delete_note_item()
    
 }
 
+#$1 filepath, $2 notename or id, $3 noteitem
+pick_file()
+{
+  b_name="$(basename "$1")"
+  if [ "$#" = "3" ]; then
+    b_name="$3"
+  fi
+  local tmp_filepath="$(file_create_quest_new "$2" "$b_name" "$default_picture_type")"
+  status=$?
+  if [ "$status" = "2" ]; then
+    return 2
+  elif [ "$status" != "0" ]; then
+    return 1
+  fi
+  cp "$1" "$tmp_filepath"
+  echo "Shall $1 be eradicated?" >&2
+  local question_an
+  read question_an
+  if echo "$question_an" | grep -q "y"; then 
+    rm "$1"
+  fi    
+}
+
+#source: $1 notename or id, $2 noteitemname or id, $3 (optional) remote
+synchronize()
+{
+
+  ! create_noteitem_test "$1" "$2" && return 1
+
+  decoded_notename="$(get_by_ni "$note_folder" "$1")"
+  status=$?
+  if [ "$status" = "1" ]; then
+    echo "Error: Note \"$decoded_notename\" not found" >&2
+    return 1
+  elif  [ ! -d "$note_folder/$decoded_notename" ]; then
+    echo "Error: \"$decoded_notename\" isn't a directory" >&2
+    return 1
+  elif [ "$status" != "0" ]; then
+    return 1
+  fi
+
+
+  decoded_name="$(get_by_ni "$note_folder/$decoded_notename" "$2")"
+  status=$?
+  if [ "$status" = "0" ]; then
+    remote_transfer_send "$note_folder/$decoded_notename/$decoded_name" "$decoded_notename" "" "y"
+    status2=$?
+    if [ "$status2" = "2" ]; then
+       #todo
+      return 2
+    elif [ "$status2" != "0" ]; then
+#todo
+      return 1
+    fi
+  elif [ "$status" = "1" ]; then
+    echo "Error: Note \"$decoded_name\" not found" >&2
+    return 1
+  else
+    return 1
+  fi
+  
+}
+
 
 #main
 
@@ -1103,6 +1269,15 @@ case "$sel_option" in
   "scan") nom_scan_single "$@";;
   "del")delete_note_item "$@";;
   "open")open_note_item "$@";;
+  "pick")pick_file "$@";;
+  "remote_pick"|"rpick")remote_transfer_send "$@";;
+  "synch"|"synchronize")synchronize "$@";;
+  "remote_file_receive")
+temp11="$1"
+temp12="$2"
+shift 2
+remote_transfer_receive "$temp11" "$temp12" "$*";;
+  "remote") remote_command "$@";;
   "list")
   if [ "$#" = "0" ]; then
     list_notes
