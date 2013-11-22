@@ -325,10 +325,10 @@ remote_transfer_send()
   #ssh-add -D
   #ssh-agent -k -a "$NOM_sensitive"
   if [ "$4" != "n" ] && [ "$status" = "0" ]; then
-    echo "Shall the file be purged?" >&2
+    echo "Shall the file be purged? (accept with yes)" >&2
     local question_an
     read question_an
-    if echo "$question_an" | grep -q "y"; then 
+    if echo "$question_an" | grep -q "yes"; then 
       rm "$1"
     fi
   fi
@@ -1188,10 +1188,10 @@ pick_file()
     return 1
   fi
   cp "$1" "$tmp_filepath"
-  echo "Shall $1 be eradicated?" >&2
+  echo "Shall the file be purged? (accept with yes)" >&2
   local question_an
   read question_an
-  if echo "$question_an" | grep -q "y"; then 
+  if echo "$question_an" | grep -q "yes"; then 
     rm "$1"
   fi    
 }
