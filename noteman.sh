@@ -42,7 +42,7 @@ nom_screenshot_imagemagick()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -59,7 +59,7 @@ nom_screenshot_ffmpeg()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -86,7 +86,7 @@ nom_camshot_vlc_preview()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -106,7 +106,7 @@ nom_camshot_ffmpeg()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -129,7 +129,7 @@ nom_camrec_ffmpeg()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_video_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -153,7 +153,7 @@ nom_audiorec_ffmpeg()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_audio_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -170,7 +170,7 @@ nom_audiorec_pulse()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "wav" "wav")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -187,7 +187,7 @@ nom_audiorec_alsa()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "wav" "wav")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -214,7 +214,7 @@ nom_scan_single()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "tiff" "tiff")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 2
+    return 0
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -427,7 +427,7 @@ show_locks()
     return 1
   fi
 
-  if [ ! -f "$$note_folder/$decoded_notename/$remote_lock" ] &&  [ ! -f "$$note_folder/$decoded_notename/$remote_lock" ]; then
+  if [ ! -f "$note_folder/$decoded_notename/$remote_lock" ] &&  [ ! -f "$note_folder/$decoded_notename/$local_lock" ]; then
     echo "Note has no locks"
   fi
   tmp_folder_path="$note_folder/$decoded_notename/$remote_lock"
