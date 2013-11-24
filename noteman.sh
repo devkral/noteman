@@ -366,11 +366,8 @@ remote_transfer_receive()
     echo "Fatal Error: filepath empty and not status!=0, status $status" >&2
     exit 1
   fi
-  #mv "$tmpfolder_bad/baddidea" "$tmp_filepath"
+  echo "$tmp_filepath"
   exit 0
-
-#  echo ""tar -cf - source_dir | 
-#ssh user@desktop 'cat > dest.tar'
 }
 
 #$@ execute commands remote
