@@ -42,7 +42,7 @@ nom_screenshot_imagemagick()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -59,7 +59,7 @@ nom_screenshot_ffmpeg()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -86,7 +86,7 @@ nom_camshot_vlc_preview()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -106,7 +106,7 @@ nom_camshot_ffmpeg()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -129,7 +129,7 @@ nom_camrec_ffmpeg()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_video_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -153,7 +153,7 @@ nom_audiorec_ffmpeg()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_audio_type")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -170,7 +170,7 @@ nom_audiorec_pulse()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "wav" "wav")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -187,7 +187,7 @@ nom_audiorec_alsa()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "wav" "wav")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -214,7 +214,7 @@ nom_scan_single()
   local tmp_filepath="$(file_create_quest_new "$1" "$2" "tiff" "tiff")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -338,7 +338,7 @@ remote_transfer_send()
   rem_tmp_filepath="$(ssh $remote_ssh "$remote_noteman is_runremote remote_file_receive \"$2\" \"$b_name\"")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi  
@@ -1222,7 +1222,7 @@ add_note()
   decoded_path="$(file_create_quest_new "$1")"
   status=$?
   if [ "$status" = "2" ] ; then
-    return 0
+    return 2
   elif [ "$status" != "0" ] ; then
     return 1
   fi
@@ -1388,7 +1388,7 @@ add_note_item()
   decoded_path="$(file_create_quest_new "$1" "$2")" # "$default_text_type")"
   status=$?
   if [ "$status" = "2" ] ; then
-    return 0
+    return 2
   elif [ "$status" != "0" ] ; then
     return 1
   fi
@@ -1472,7 +1472,7 @@ pick_file()
   tmp_filepath="$(file_create_quest_new "$2" "$b_name")"
   status=$?
   if [ "$status" = "2" ]; then
-    return 0
+    return 2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -1511,7 +1511,7 @@ synchronize()
     remote_transfer_send "$note_folder/$decoded_notename/$decoded_name" "$decoded_notename"
     status2=$?
     if [ "$status2" = "2" ]; then
-      return 0
+      return 2
     elif [ "$status2" != "0" ]; then
       return 1
     fi
@@ -1584,4 +1584,7 @@ remote_transfer_receive "$temp11" "$temp12" "$@";;
 esac
 status=$?
 
+if [ "$status" = "2" ]; then
+  echo "Status $status: Filecreation aborted" >&2
+fi
 exit $status
