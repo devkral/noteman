@@ -1409,9 +1409,8 @@ open_note_item()
       nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
       return "$?"
     else
-      cp "$note_folder/$tmp_notename/$tmp_noteitemname" "$tmp_folder/$tmp_noteitemname"
-      chmod 555 "$tmp_folder/$tmp_noteitemname"
-      nom_open "$tmp_folder/$tmp_noteitemname" "$3" "$4"
+      cp "$note_folder/$tmp_notename/$tmp_noteitemname" "$tmp_folder/copy-$tmp_noteitemname"
+      nom_open "$tmp_folder/copy-$tmp_noteitemname" "$3" "$4"
       return "$?"
     fi
   elif [ "$status" = "1" ] && [ "$locked_view" != "2" ]; then
