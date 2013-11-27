@@ -279,8 +279,7 @@ usage1()
   echo "  locktypes can be (can be combined):"
   echo "    [v]iew: don't list note contents."
   echo "    [l]ist: just don't list."
-  echo "    [r]ead: neither allow note to be read nor contents to be listed."
-  echo "    [w]rite: locks write access (but not right to change permissions)"
+  echo "    [a]ccess: don't allow any access to note."
   echo "    [p]ermission: locks right to change permissions"
   echo "slocks|showlocks <note>: display active locks for note"
   echo "list [notename]: list note items or notes"
@@ -439,8 +438,7 @@ show_locks()
   tmp_folder_path="$note_folder/$decoded_notename/$remote_lock"
   if [ -f "$tmp_folder_path" ]; then  
     echo "Remote locks:"
-    grep -i -q "w" "$tmp_folder_path" && echo "  write is blocked"
-    grep -i -q "r" "$tmp_folder_path" && echo "  read is locked"
+    grep -i -q "a" "$tmp_folder_path" && echo "  access is blocked"
     grep -i -q "v" "$tmp_folder_path" && echo "  visibility is locked"
     grep -i -q "l" "$tmp_folder_path" && echo "  listing is locked"
     grep -i -q "p" "$tmp_folder_path" && echo "  permission-change is locked"
@@ -449,8 +447,7 @@ show_locks()
   tmp_folder_path="$note_folder/$decoded_notename/$local_lock"
   if [ -f "$tmp_folder_path" ]; then  
     echo "Local locks:"
-    grep -i -q "w" "$tmp_folder_path" && echo "  write is blocked"
-    grep -i -q "r" "$tmp_folder_path" && echo "  read is locked"
+    grep -i -q "a" "$tmp_folder_path" && echo "  access is blocked"
     grep -i -q "v" "$tmp_folder_path" && echo "  visibility is locked"
     grep -i -q "l" "$tmp_folder_path" && echo "  listing is locked"
     grep -i -q "p" "$tmp_folder_path" && echo "  permission-change is locked"
@@ -495,9 +492,10 @@ lock_down()
 
   tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "v")"
   tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "l")"
-  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "w")"
-  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "r")"
+  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "a")"
   tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "p")"
+
+#  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "r")"
   
   if [ "${tmp_lock_string}" != "" ]; then
     echo "${tmp_lock_string}" > "$note_folder/$decoded_notename/$tmp_lockmode"
@@ -885,10 +883,10 @@ file_create_quest_new()
     elif [ "$status" != "0" ]; then
       return 1
     fi
-    is_locked "$decoded_notename" "w"
+    is_locked "$decoded_notename" "a"
     status=$?
     if [ "$status" = "2" ]; then
-      echo "Error: write permission is locked" >&2
+      echo "Error: no access to note" >&2
       return 1
     elif [ "$status" != "0" ]; then
       return 1
@@ -995,7 +993,7 @@ nom_housekeeping()
     if [ ! -e "$note_folder/$tmp_file_n/$text_name" ] && [ "$tmp_file_n" != "$trash_name" ]; then
       touch "$note_folder/$tmp_file_n/$text_name"
     fi
-    is_locked "$tmp_file_n" "r" "v" "l"
+    is_locked "$tmp_file_n" "a" "v" "l"
     status_locked=$?
 
     if [ "$tmp_file_n" != "$trash_name" ] && [ -e "$note_folder/$tmp_file_n/$alarmclock_name" ] && [ "$status_locked" != "2" ] &&
@@ -1032,10 +1030,10 @@ note_reminder()
     elif [ "$status" != "0" ]; then
       return 1
     fi
-    is_locked "$decoded_notename" "w"
+    is_locked "$decoded_notename" "a"
     locked_status="$?"
     if [ "$locked_status" = "2" ]; then
-      echo "Error: writing is locked" >&2
+      echo "Error: access is locked" >&2
       return 1
     elif [ "$locked_status" != "0" ]; then
       return 1
@@ -1065,10 +1063,10 @@ note_reminder()
     elif [ "$status" != "0" ]; then
       return 1
     fi
-    is_locked "$decoded_notename" "r"
+    is_locked "$decoded_notename" "a"
     locked_status="$?"
     if [ "$locked_status" = "2" ]; then
-      echo "Error: reading is locked" >&2
+      echo "Error: Access is locked" >&2
       return 1
     elif [ "$locked_status" != "0" ]; then
       return 1
@@ -1157,17 +1155,17 @@ move_note_item()
     return 1
   fi
 
-  is_locked "$decoded_notenamesrc" "r"
+  is_locked "$decoded_notenamesrc" "a"
   locked_status="$?"
   if [ "$locked_status" = "2" ]; then
-    echo "Error: no read permission" >&2
+    echo "Error: no access" >&2
     return 1
   fi
 
-  is_locked "$decoded_notenamedest" "w"
+  is_locked "$decoded_notenamedest" "a"
   locked_status="$?"
   if [ "$locked_status" = "2" ]; then
-    echo "Error: no write permission" >&2
+    echo "Error: no access" >&2
     return 1
   fi
   
@@ -1220,10 +1218,10 @@ restore_trash()
     elif [ "$status" != "0" ]; then
       return 1
     fi
-    is_locked "$decoded_notename" "w"
+    is_locked "$decoded_notename" "a"
     locked_status="$?"
     if [ "$locked_status" = "2" ]; then
-      echo "Error: no permission to write" >&2
+      echo "Error: no access" >&2
       return 1
     fi
     [ -d "$note_folder/$decoded_notename/$trash_name" ] && tmp_trash_item="$(ls "$note_folder/$decoded_notename/$trash_name")"
@@ -1286,10 +1284,10 @@ del_note()
     echo "Purge trash bin for notes"
     rm -r "$note_folder/$trash_name"
   else
-    is_locked "$decoded_notename" "w"
+    is_locked "$decoded_notename" "a"
     locked_status="$?"
     if [ "$locked_status" = "2" ]; then
-      echo "Error: no permission to delete (write permission)" >&2
+      echo "Error: no permission to delete (access permission)" >&2
       return 1
     fi
     if [ -e "$note_folder/$trash_name" ]; then
@@ -1321,10 +1319,10 @@ list_note_items()
   if [ "$locked_status" = "2" ]; then
     return 0
   fi
-  is_locked "$decoded_notename" "r"
+  is_locked "$decoded_notename" "a"
   locked_status="$?"
   if [ "$locked_status" = "2" ]; then
-    echo "Error: reading is blocked" >&2
+    echo "Error: no access" >&2
     return 1
   fi
   list_id_name "$note_folder/$decoded_notename"
@@ -1371,10 +1369,10 @@ open_note_item()
   else
     tmp_notename="$decoded_notename"
   fi
-  is_locked "$tmp_notename" "r"
+  is_locked "$tmp_notename" "a"
   locked_status="$?"
   if [ "$locked_status" = "2" ]; then
-    echo "Error: reading is locked" >&2
+    echo "Error: access is locked" >&2
     return 1
   elif [ "$locked_status" != "0" ]; then
     return 1
@@ -1395,8 +1393,6 @@ open_note_item()
   is_locked "$tmp_notename" "v"
   locked_view="$?"
 
-  is_locked "$tmp_notename" "w"
-  locked_write="$?"
 
   
   if [ "$status" = "0" ]; then
@@ -1405,14 +1401,7 @@ open_note_item()
     else
       tmp_noteitemname="$decoded_name"
     fi
-    if [ "$locked_write" != "2" ]; then
-      nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
-      return "$?"
-    else
-      cp "$note_folder/$tmp_notename/$tmp_noteitemname" "$tmp_folder/copy-$tmp_noteitemname"
-      nom_open "$tmp_folder/copy-$tmp_noteitemname" "$3" "$4"
-      return "$?"
-    fi
+    nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
   elif [ "$status" = "1" ] && [ "$locked_view" != "2" ]; then
     collect_string="$(give_corrections "$decoded_notename" "$decoded_name")"
     status2="$?"
@@ -1542,10 +1531,10 @@ synchronize()
   elif [ "$status" != "0" ]; then
     return 1
   fi
-  is_locked "$decoded_notename" "r"
+  is_locked "$decoded_notename" "a"
   locked_status="$?"
   if [ "$locked_status" = "2" ]; then
-    echo "Error: reading is locked" >&2
+    echo "Error: no access" >&2
     return 1
   elif [ "$locked_status" != "0" ]; then
     return 1
