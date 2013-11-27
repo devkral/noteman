@@ -277,8 +277,9 @@ usage1()
   echo "    $local_lock: locks local access"
   echo "    <empty>: locks opposite access"
   echo "  locktypes can be (can be combined):"
-  echo "    [v]iew: neither list note nor contents"
-  echo "    [r]ead: neither allow note be read nor contents be listed"
+  echo "    [v]iew: don't list note contents."
+  echo "    [l]ist: just don't list."
+  echo "    [r]ead: neither allow note to be read nor contents to be listed."
   echo "    [w]rite: locks write access (but not right to change permissions)"
   echo "    [p]ermission: locks right to change permissions"
   echo "slocks|showlocks <note>: display active locks for note"
@@ -396,15 +397,23 @@ delete_old_file()
 }
 
 
-#$1 notename real,$2 locktype (=v,w,r) v=view, r=read,w=write
+#$1 notename real,$* locktype (=v,l,w,r) v=view,l=list, r=read,w=write
 is_locked()
 {
   if [ "$global_lockmode" != "$remote_lock" ] && [ "$global_lockmode" != "$local_lock" ]; then
     echo "Error: lockmode \"$global_lockmode\" incorrect" >&2
     return 1
   fi
-  if [ -f "$note_folder/$1/$global_lockmode" ] && grep -i -q "$2" "$note_folder/$1/$global_lockmode"; then
-    return 2
+  tmp_notename="$1"
+  shift 1
+  if [ -f "$note_folder/$tmp_notename/$global_lockmode" ] ;then
+    for tmppermission in "$@"
+    do 
+      if grep -i -q "$tmppermission" "$note_folder/$tmp_notename/$global_lockmode"; then
+        return 2
+      fi
+    done
+    return 0
   else
     return 0
   fi
@@ -433,6 +442,7 @@ show_locks()
     grep -i -q "w" "$tmp_folder_path" && echo "  write is blocked"
     grep -i -q "r" "$tmp_folder_path" && echo "  read is locked"
     grep -i -q "v" "$tmp_folder_path" && echo "  visibility is locked"
+    grep -i -q "l" "$tmp_folder_path" && echo "  listing is locked"
     grep -i -q "p" "$tmp_folder_path" && echo "  permission-change is locked"
   fi
   
@@ -442,6 +452,7 @@ show_locks()
     grep -i -q "w" "$tmp_folder_path" && echo "  write is blocked"
     grep -i -q "r" "$tmp_folder_path" && echo "  read is locked"
     grep -i -q "v" "$tmp_folder_path" && echo "  visibility is locked"
+    grep -i -q "l" "$tmp_folder_path" && echo "  listing is locked"
     grep -i -q "p" "$tmp_folder_path" && echo "  permission-change is locked"
   fi
 }
@@ -483,6 +494,7 @@ lock_down()
   fi
 
   tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "v")"
+  tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "l")"
   tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "w")"
   tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "r")"
   tmp_lock_string="$tmp_lock_string$(echo "$args"| grep -i -o "p")"
@@ -676,7 +688,7 @@ list_id_name()
     if name_reserved_check "$tmp_file_n" 2> /dev/null; then
       ((nidcount+=1))
       if [ -d "$note_folder/$tmp_file_n" ]; then
-        is_locked "$tmp_file_n" "v"
+        is_locked "$tmp_file_n" "l"
         locked_status="$?"
         if [ "$locked_status" != "2" ]; then
           echo "id $nidcount: $tmp_file_n"
@@ -983,13 +995,11 @@ nom_housekeeping()
     if [ ! -e "$note_folder/$tmp_file_n/$text_name" ] && [ "$tmp_file_n" != "$trash_name" ]; then
       touch "$note_folder/$tmp_file_n/$text_name"
     fi
-    is_locked "$tmp_file_n" "v"
+    is_locked "$tmp_file_n" "r" "v" "l"
     status_locked=$?
-    is_locked "$tmp_file_n" "r"
-    status_lockedread=$?
 
     if [ "$tmp_file_n" != "$trash_name" ] && [ -e "$note_folder/$tmp_file_n/$alarmclock_name" ] && [ "$status_locked" != "2" ] &&
-  [ "$status_lockedread" != "2" ] &&  [[  "$(sed "s/:.*$//" "$note_folder/$tmp_file_n/$alarmclock_name")" -le "$(date +%s)"  ]]; then
+  [[  "$(sed "s/:.*$//" "$note_folder/$tmp_file_n/$alarmclock_name")" -le "$(date +%s)"  ]]; then
       tmp_comment="$(sed "s/^[^:]*://" "$note_folder/$tmp_file_n/$alarmclock_name")"
       if [ "$tmp_comment" != "" ]; then
         tmp_comment=": $tmp_comment"
@@ -1382,6 +1392,12 @@ open_note_item()
       return 1
     fi
   fi
+  is_locked "$tmp_notename" "v"
+  locked_view="$?"
+
+  is_locked "$tmp_notename" "w"
+  locked_write="$?"
+
   
   if [ "$status" = "0" ]; then
     if [ "$decoded_name" = "$trash_name" ]; then
@@ -1389,11 +1405,18 @@ open_note_item()
     else
       tmp_noteitemname="$decoded_name"
     fi
-    nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
-    return "$?"
-  elif [ "$status" = "1" ]; then
+    if [ "$locked_write" != "2" ]; then
+      nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
+      return "$?"
+    else
+      cp "$note_folder/$tmp_notename/$tmp_noteitemname" "$tmp_folder/$tmp_noteitemname"
+      chmod 555 "$tmp_folder/$tmp_noteitemname"
+      nom_open "$tmp_folder/$tmp_noteitemname" "$3" "$4"
+      return "$?"
+    fi
+  elif [ "$status" = "1" ] && [ "$locked_view" != "2" ]; then
     collect_string="$(give_corrections "$decoded_notename" "$decoded_name")"
-    status2=$?
+    status2="$?"
     if [ "$status2" = "0" ]; then
       nom_open "$note_folder/$decoded_notename/$collect_string" "$3" "$4"
     fi
