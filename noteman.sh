@@ -495,7 +495,7 @@ lock_down()
 }
 
 
-#$1 note, $2 (optional) y note creation menu, returns 0 on success and echos decoded note
+#$1 note, $2 (optional) y note creation menu, returns 0 on success and echos decoded note, return 2 on file creation abortion
 note_exist_echo()
 {
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
@@ -504,7 +504,8 @@ note_exist_echo()
     echo "Note doesn't exist. Shall a note named \"$decoded_notename\" be created?" >&2
     local question_an
     read question_an
-    if ! echo "$question_an" | grep -i -q "y"; then 
+    if ! echo "$question_an" | grep -i -q "y"; then
+      echo "Note creation cancelled" >&2
       return 2
     else
       echo "Create note" >&2
@@ -573,7 +574,7 @@ nonoi_create_check()
       return 0
     fi
   elif [ "$#" = "2" ]; then
-    decoded_notename="$(note_exist_echo "$1")"
+    decoded_notename="$(note_exist_echo "$1" n)"
     status=$?
     if [ "$status" != "0" ]; then
       return 1
@@ -867,7 +868,9 @@ file_create_quest_new()
     ! create_noteitem_test "$1" "$2" && return 1
     decoded_notename="$(note_exist_echo "$1" "y")"
     status=$?
-    if [ "$status" != "0" ]; then
+    if [ "$status" = "2" ]; then
+      return 2
+    elif [ "$status" != "0" ]; then
       return 1
     fi
     is_locked "$decoded_notename" "w"
@@ -987,7 +990,11 @@ nom_housekeeping()
 
     if [ "$tmp_file_n" != "$trash_name" ] && [ -e "$note_folder/$tmp_file_n/$alarmclock_name" ] && [ "$status_locked" != "2" ] &&
   [ "$status_lockedread" != "2" ] &&  [[  "$(sed "s/:.*$//" "$note_folder/$tmp_file_n/$alarmclock_name")" -le "$(date +%s)"  ]]; then
-      reminder_string="$reminder_string\n  $tmp_file_n: $(date --date="@$(sed "s/:.*$//" "$note_folder/$tmp_file_n/$alarmclock_name")"): $(sed "s/^[^:]*://" "$note_folder/$tmp_file_n/$alarmclock_name")"
+      tmp_comment="$(sed "s/^[^:]*://" "$note_folder/$tmp_file_n/$alarmclock_name")"
+      if [ "$tmp_comment" != "" ]; then
+        tmp_comment=": $tmp_comment"
+      fi
+      reminder_string="$reminder_string\n  $tmp_file_n: $(date --date="@$(sed "s/:.*$//" "$note_folder/$tmp_file_n/$alarmclock_name")")$tmp_comment"
     fi
   done
   if [ "$reminder_string" != "" ]; then
@@ -1003,11 +1010,11 @@ note_reminder()
   if [ "$#" = "0" ]; then
     nom_housekeeping
     return 0
-  elif [ "$#" -gt "2" ]; then
+  elif [ "$#" -ge "2" ]; then
     decoded_notename="$(get_by_ni "$note_folder" "$1")"
     status=$?
     if [ "$status" = "1" ]; then
-      echo "Error: \"$decoded_notename\" not found" >&2
+      echo "Error: Note \"$decoded_notename\" not found" >&2
       return 1
     elif  [ ! -d "$note_folder/$decoded_notename" ]; then
       echo "Error: \"$decoded_notename\" isn't a directory" >&2
@@ -1015,11 +1022,23 @@ note_reminder()
     elif [ "$status" != "0" ]; then
       return 1
     fi
-    
+    is_locked "$decoded_notename" "w"
+    locked_status="$?"
+    if [ "$locked_status" = "2" ]; then
+      echo "Error: writing is locked" >&2
+      return 1
+    elif [ "$locked_status" != "0" ]; then
+      return 1
+    fi
+
     if [ -d "$note_folder/$decoded_notename" ]; then
       local temp_time="$(date --date="$2" +%s)"
-      echo "$temp_time: $3" > "$note_folder/$decoded_notename/$alarmclock_name"
-      date --date="@$temp_time"
+      echo "$temp_time:$3" > "$note_folder/$decoded_notename/$alarmclock_name"
+      if [ "$3" != "" ]; then
+        echo "Added reminder: $(date --date="@$temp_time"): $3" >&2
+      else
+        echo "Added reminder: $(date --date="@$temp_time")" >&2
+      fi
     else
       echo "Error: invalid note" >&2
     fi
@@ -1045,12 +1064,17 @@ note_reminder()
       return 1
     fi
     if [ -f "$note_folder/$decoded_notename/$alarmclock_name" ]; then
-      echo -e "\033[36;1mNote has reminder[Now: $(date)]:\n\033[31;1m$(date --date="@$(sed "s/:.*$//" "$note_folder/$decoded_notename/$alarmclock_name")"): $(sed "s/^[^:]*://" "$note_folder/$decoded_notename/$alarmclock_name")\033[0m"
+      tmp_comment="$(sed "s/^[^:]*://" "$note_folder/$decoded_notename/$alarmclock_name")"
+      if [ "$tmp_comment" != "" ]; then
+        tmp_comment=": $tmp_comment"
+      fi
+      echo -e "\033[36;1mNote has reminder[Now: $(date)]:\n\033[31;1m$(date --date="@$(sed "s/:.*$//" "$note_folder/$decoded_notename/$alarmclock_name")"): ${tmp_comment}\033[0m"
     else
       echo "Note has no reminder"
     fi
     return 0
   fi
+#should never happen
   return 1
 }
 
@@ -1584,7 +1608,6 @@ remote_transfer_receive "$temp11" "$temp12" "$@";;
 esac
 status=$?
 
-if [ "$status" = "2" ]; then
-  echo "Status $status: Filecreation aborted" >&2
-fi
+
+
 exit $status
