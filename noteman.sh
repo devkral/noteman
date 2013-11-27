@@ -1563,7 +1563,7 @@ synchronize()
 
 
 if [ ! -e "$note_folder" ]; then
-  mkdir "$note_folder"
+  mkdir -m700 "$note_folder"
 fi
 
 [ -e "$tmp_folder" ] && rm -r "$tmp_folder"
