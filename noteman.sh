@@ -554,11 +554,7 @@ name_reserved_rename_check()
 name_reserved_check()
 {
   if [[ $1 != *[!0-9]* ]]; then #only digits conflict with id 
-    echo "Error: Name must contain a non-digit: $n_base_name" >&2
-    return 1
-  fi
-  if echo "$1" | grep ";"; then # ; conflicts hard 
-    echo "Error: Name mustn't contain a ;: $n_base_name" >&2
+    echo "Error: Name must contain a non-digit: $1" >&2
     return 1
   fi
 
@@ -584,7 +580,7 @@ nonoi_create_check()
       return 0
     fi
   elif [ "$#" = "2" ]; then
-    decoded_notename="$(note_exist_echo "$1" n)"
+    decoded_notename="$(note_exist_echo "$1")"
     status=$?
     if [ "$status" != "0" ]; then
       return 1
@@ -623,10 +619,13 @@ get_name_by_id()
     echo "$text_name"
     return 0
   fi
+  if [ "$(ls "$1")" = "" ]; then
+    return 0
+  fi
   nidcount=1
-  IFS=";"
-  for tmp_file_n in $(ls --color=never "$1" | tr '\n' ';' | sed "s/;$//")
+  for tmp_file_n in "$1"/*
   do
+    tmp_file_n="$(basename "$tmp_file_n")"
     if name_reserved_check "$tmp_file_n" 2> /dev/null; then
       ((nidcount+=1))
       if [ "$nidcount" = "$2" ]; then
@@ -635,7 +634,6 @@ get_name_by_id()
       fi
     fi
   done
-  IFS=" "
   echo "ID ($2) not found" >&2
   return 1
 }
@@ -650,10 +648,13 @@ get_id_by_name()
     echo "1"
     return 0
   fi
+  if [ "$(ls "$1")" = "" ]; then
+    return 0
+  fi
   nidcount=1
-  IFS=";"
-  for tmp_file_n in $(ls --color=never -1 "$1" | tr '\n' ';' | sed "s/;$//")
+  for tmp_file_n in "$1"/*
   do
+    tmp_file_n="$(basename "$tmp_file_n")"
     if name_reserved_check "$tmp_file_n" 2> /dev/null; then
       ((nidcount+=1))
       if [ "$tmp_file_n" = "$2" ]; then
@@ -662,7 +663,6 @@ get_id_by_name()
       fi
     fi
   done
-  IFS=" "
   echo "Name ($2) not found" >&2
   return 1
 }
@@ -674,15 +674,18 @@ list_id_name()
 #no check if invisible because trash should be always visible
   if [ -e "$1/$trash_name" ]; then
     echo "id 0: $trash_name"
-    echo "Trash contains: $(ls "$1/$trash_name" | tr "\n" " ")"
+    echo "Trash contains: $(ls -X "$1/$trash_name" | tr "\n" "," | sed -e "s|,$||")"
   fi
   if  [ -e "$1/$text_name" ]; then
     echo "id 1: $text_name"
   fi
+  if [ "$(ls "$1")" = "" ]; then
+    return 0
+  fi
   nidcount=1
-  IFS=";"
-  for tmp_file_n in $(ls --color=never "$1" | tr '\n' ';' | sed "s/;$//")
+  for tmp_file_n in "$1"/*
   do
+    tmp_file_n="$(basename "$tmp_file_n")"
     if name_reserved_check "$tmp_file_n" 2> /dev/null; then
       ((nidcount+=1))
       if [ -d "$note_folder/$tmp_file_n" ]; then
@@ -696,7 +699,6 @@ list_id_name()
       fi
     fi
   done
-  IFS=" "
   return 0
 }
 
@@ -736,9 +738,13 @@ give_corrections()
 {
   ! create_noteitem_test "$1" "$2" && return 1
   local collect_string=""
-  for tmp_file_n in $(ls "$note_folder/$1")
+  if [ "$(ls "$note_folder/$1")" = "" ]; then
+    return 0
+  fi
+  for tmp_file_n in "$note_folder/$1"/*
   do
-#secure against script kiddies (against completing a reserved name e.g. local_lock)
+    tmp_file_n="$(basename "$tmp_file_n")"
+ #secure against script kiddies (against completing a reserved name e.g. local_lock)
     if name_reserved_check "$tmp_file_n" 2> /dev/null && echo "$tmp_file_n" | grep -q "$2"; then
       collect_string="$collect_string\n$tmp_file_n"
     fi
@@ -970,16 +976,15 @@ nom_housekeeping()
   #date +%s
   nidcount=0
   local reminder_string=""
-  for tmp_file_n in $(ls "$note_folder")
+
+  if [ "$(ls "$note_folder")" = "" ]; then
+    return 0
+  fi
+  for tmp_file_n in "$note_folder"/*
   do
-    if [[ "$tmp_file_n" != *[!0-9]* ]] || 
-  echo "$tmp_file_n" | grep ";"; then
-      local tmp_file_n_new="$tmp_file_n"
-      tmp_file_n_new="$(echo "$tmp_file_n_new" | sed "s/;/,/g")"
-      while [ -e "$note_folder/$tmp_file_n_new" ];
-      do
-        tmp_file_n_new="_$tmp_file_n_new"        
-      done
+    tmp_file_n="$(basename "$tmp_file_n")"
+    if [[ "$tmp_file_n" != *[!0-9]* ]]; then
+      local tmp_file_n_new="$(rename_util "$note_folder/_$tmp_file_n")"
       mv "$note_folder/$tmp_file_n" "$note_folder/$tmp_file_n_new"
       tmp_file_n="$tmp_file_n_new"
     fi
@@ -1109,10 +1114,14 @@ nom_housekeeping_note()
     echo "Error: Note doesn't exist" >&2
     return 1
   fi
-  for tmp_file_n in $(ls "$note_folder/$1")
+  if [ "$(ls "$note_folder/$1")" = "" ]; then
+    return 0
+  fi
+  for tmp_file_n in "$note_folder/$1"/*
   do
+    tmp_file_n="$(basename "$tmp_file_n")"
     if ! name_reserved_rename_check "$tmp_file_n"; then
-      tmp_corrected_path="$(rename_util "$note_folder/$(echo "$tmp_file_n" | sed "s/;/,/g")")"
+      tmp_corrected_path="$(rename_util "$note_folder/_$tmp_file_n")"
       mv "$note_folder/$tmp_file_n" "$tmp_corrected_path)"
       echo "Debug: Renamed \"$tmp_file_n\" to \"$tmp_corrected_path\"" >&2
     fi
@@ -1189,7 +1198,7 @@ restore_trash()
 {
   tmp_trash_item=""
   if [ "$1" = "" ]; then
-    [ -d "$note_folder/$trash_name" ] &&  tmp_trash_item="$(ls "$note_folder/$trash_name")"
+    [ -d "$note_folder/$trash_name" ] &&  tmp_trash_item="$(ls -X "$note_folder/$trash_name")"
     if [ "$tmp_trash_item" = "" ]; then
       echo "Note trash is empty"
       return 0 
@@ -1197,7 +1206,7 @@ restore_trash()
       decoded_path="$(file_create_quest_new "$tmp_trash_item")"
       status=$?
       if [ "$status" = "2" ] ; then
-        return 0
+        return 2
       elif [ "$status" != "0" ] ; then
         return 1
       fi
@@ -1224,13 +1233,13 @@ restore_trash()
       echo "Error: no access" >&2
       return 1
     fi
-    [ -d "$note_folder/$decoded_notename/$trash_name" ] && tmp_trash_item="$(ls "$note_folder/$decoded_notename/$trash_name")"
+    [ -d "$note_folder/$decoded_notename/$trash_name" ] && tmp_trash_item="$(ls -X "$note_folder/$decoded_notename/$trash_name")"
     if [ "$tmp_trash_item" = "" ]; then
       echo "Note item trash is empty"
       return 0
     elif [ "$(echo "$tmp_trash_item" | wc -l)" = "1" ]; then
       decoded_path="$(file_create_quest_new "$decoded_notename" "$tmp_trash_item")"
-      status=$?
+      status="$?"
       if [ "$status" = "2" ]; then
         return 0
       elif [ "$status" != "0" ]; then
@@ -1304,11 +1313,13 @@ list_note_items()
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
   status=$?
   if [ "$status" = "1" ]; then
-    echo "Error: \"$decoded_notename\" not found" >&2
+    echo "Error: Note \"$decoded_notename\" not found" >&2
     return 1
   elif  [ ! -d "$note_folder/$decoded_notename" ]; then
     echo "Error: \"$decoded_notename\" isn't a directory" >&2
     return 1
+  elif  [ "$decoded_notename" = "$trash_name" ]; then
+    echo "List trash:" >&2
   elif [ "$status" != "0" ]; then
     return 1
   fi
@@ -1365,7 +1376,15 @@ open_note_item()
   fi
 
   if [ "$decoded_notename" = "$trash_name" ]; then
-    tmp_notename="$trash_name/$(ls $note_folder/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
+    if [ "$(ls -X "$note_folder/$trash_name" | wc -l)" = "1" ]; then
+      tmp_notename="$trash_name/$(basename "$note_folder/$trash_name"/*)"
+    elif [ "$(ls -D "$note_folder/$trash_name" | wc -l)" = "0" ]; then
+      echo "Trash is empty" >&2
+      return 0
+    else
+       echo "Error: more than one element in trash" >&2
+       return 1
+    fi
   else
     tmp_notename="$decoded_notename"
   fi
@@ -1379,7 +1398,8 @@ open_note_item()
   fi
 
   decoded_name="$(get_by_ni "$note_folder/$tmp_notename" "$tmp_noteitem")"
-  status=$?
+  status="$?"
+
   if [ "$decoded_name" = "$local_lock" ] || [ "$decoded_name" = "$remote_lock" ]; then
     is_locked "$decoded_notename" "p"
     locked_status="$?"
@@ -1392,16 +1412,8 @@ open_note_item()
   fi
   is_locked "$tmp_notename" "v"
   locked_view="$?"
-
-
-  
   if [ "$status" = "0" ]; then
-    if [ "$decoded_name" = "$trash_name" ]; then
-      tmp_noteitemname="$trash_name/$(ls $note_folder/$tmp_notename/$trash_name | tr "\n" "/" | sed "s|/.*$||" )"
-    else
-      tmp_noteitemname="$decoded_name"
-    fi
-    nom_open "$note_folder/$tmp_notename/$tmp_noteitemname" "$3" "$4"
+    nom_open "$note_folder/$tmp_notename/$decoded_name" "$3" "$4"
   elif [ "$status" = "1" ] && [ "$locked_view" != "2" ]; then
     collect_string="$(give_corrections "$decoded_notename" "$decoded_name")"
     status2="$?"
