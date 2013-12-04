@@ -506,7 +506,9 @@ note_exist_echo()
 {
   decoded_notename="$(get_by_ni "$note_folder" "$1")"
   status="$?"
-  if [ "$status" = "1" ] && [ "$2" = "y" ]; then
+  if ! name_reserved_check "$decoded_notename"; then #[ "$status" = "1" ] ; then
+    return 1
+  elif [ "$status" = "1" ] && [ "$2" = "y" ]; then
     echo "Note doesn't exist. Shall a note named \"$decoded_notename\" be created?" >&2
     local question_an
     read question_an
