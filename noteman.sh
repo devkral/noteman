@@ -539,20 +539,37 @@ note_exist_echo()
 }
 
 
-#$1 basename  returns 0 if an allowed name, not 0, for housekeeping
-name_reserved_rename_check()
+#$1 path
+name_reserved_rename()
 {
-  if [[ $1 != *[!0-9]* ]] || [ "$1" = "$default_name" ]; then #only digits conflict with id 
-    return 1
+  tmp_file_dir="$(dirname "$1")"
+  tmp_file_base="$(basename "$1")"
+  if [[ $tmp_file_base != *[!0-9]* ]] || [ "$tmp_file_base" = "$default_name" ]; then #only digits conflict with id
+    tmp_file_base="_$tmp_file_base"
   fi
-  return 0
+  tmp_file_base="$(echo "$tmp_file_base" | sed "s/;/,/g")"
+  if [ "$tmp_file_base" = "$(basename "$1")" ]; then
+    echo "$1"
+    return 0
+  else
+    tmp_newpath="$(rename_util "$tmp_file_dir/$tmp_file_base")"
+    echo "rename \"$1\" to \"$tmp_newpath\"" >&2
+    mv "$1" "$tmp_newpath"
+    return 0
+  fi
 }
+
 
 #$1 basename 
 name_reserved_check()
 {
   if [[ $1 != *[!0-9]* ]]; then #only digits conflict with id 
     echo "Error: Name must contain a non-digit: $1" >&2
+    return 1
+  fi
+
+  if echo "$1" | grep ";" || echo "$1" | grep "/"; then #only digits conflict with id 
+    echo "Error: Name contains evil character: $1" >&2
     return 1
   fi
 
@@ -980,12 +997,8 @@ nom_housekeeping()
   fi
   for tmp_file_n in "$note_folder"/*
   do
+    tmp_file_n="$(name_reserved_rename "$tmp_file_n")"
     tmp_file_n="$(basename "$tmp_file_n")"
-    if [[ "$tmp_file_n" != *[!0-9]* ]]; then
-      local tmp_file_n_new="$(rename_util "$note_folder/_$tmp_file_n")"
-      mv "$note_folder/$tmp_file_n" "$note_folder/$tmp_file_n_new"
-      tmp_file_n="$tmp_file_n_new"
-    fi
     
     if [ ! -d "$note_folder/$tmp_file_n" ]; then
       mv "$note_folder/$tmp_file_n" "$tmp_folder"
@@ -1117,12 +1130,7 @@ nom_housekeeping_note()
   fi
   for tmp_file_n in "$note_folder/$1"/*
   do
-    tmp_file_n="$(basename "$tmp_file_n")"
-    if ! name_reserved_rename_check "$tmp_file_n"; then
-      tmp_corrected_path="$(rename_util "$note_folder/_$tmp_file_n")"
-      mv "$note_folder/$tmp_file_n" "$tmp_corrected_path)"
-      echo "Debug: Renamed \"$tmp_file_n\" to \"$tmp_corrected_path\"" >&2
-    fi
+    name_reserved_rename "$tmp_file_n" > /dev/null
   done
 }
 
