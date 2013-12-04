@@ -39,8 +39,8 @@ default_delete_after_copy="ask"
 # $1 note name, $2 save name, $3 (optional) waittime to trigger in seconds
 nom_screenshot_imagemagick()
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
@@ -56,8 +56,8 @@ nom_screenshot_imagemagick()
 # $1 note name, $2 save name, $3 (optional) waittime to trigger in seconds
 nom_screenshot_ffmpeg() 
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
@@ -83,8 +83,8 @@ nom_screenshot()
 # $1 note name, $2 save name
 nom_camshot_vlc_preview()
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
@@ -103,8 +103,8 @@ nom_camshot_vlc_preview()
 # $1 note name, $2 save name, $3 (optional) waittime to trigger in seconds
 nom_camshot_ffmpeg() 
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_picture_type")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
@@ -126,8 +126,8 @@ nom_camshot()
 # $1 note name, $2 save name
 nom_camrec_ffmpeg()
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_video_type")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_video_type")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
@@ -150,8 +150,8 @@ nom_camrec()
 # $1 note name, $2 save name
 nom_audiorec_ffmpeg()
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_audio_type")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "$default_audio_type")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
@@ -167,8 +167,8 @@ nom_audiorec_ffmpeg()
 # $1 note name, $2 save name
 nom_audiorec_pulse()
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "wav" "wav")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "wav" "wav")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
@@ -184,8 +184,8 @@ nom_audiorec_pulse()
 # $1 note name, $2 save name
 nom_audiorec_alsa()
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "wav" "wav")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "wav" "wav")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
@@ -211,8 +211,8 @@ nom_audiorec()
 # $1 note name, $2 save name
 nom_scan_single()
 {
-  local tmp_filepath="$(file_create_quest_new "$1" "$2" "tiff" "tiff")"
-  status=$?
+  tmp_filepath="$(file_create_quest_new "$1" "$2" "tiff" "tiff")"
+  status="$?"
   if [ "$status" = "2" ]; then
     return 2
   elif [ "$status" != "0" ]; then
