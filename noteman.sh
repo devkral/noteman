@@ -72,12 +72,8 @@ nom_screenshot_ffmpeg()
 
 nom_screenshot()
 {
-#  if [ "$DISPLAY" = "" ]; then
-#    
-#  else
    nom_screenshot_imagemagick "$@"
-   #nom_screenshot_ffmpeg $@
-#  fi
+   #nom_screenshot_ffmpeg "$@"
 }
 
 # $1 note name, $2 save name
@@ -120,7 +116,7 @@ nom_camshot_ffmpeg()
 # $1 note name, $2 save name, $3 (optional) waittime to trigger in seconds 
 nom_camshot()
 {
-  nom_camshot_ffmpeg $@
+  nom_camshot_ffmpeg "$@"
 }
 
 # $1 note name, $2 save name
@@ -143,7 +139,7 @@ nom_camrec_ffmpeg()
 # $1 note name, $2 save name
 nom_camrec()
 {
-  nom_camrec_ffmpeg $@
+  nom_camrec_ffmpeg "$@"
 }
 
 
@@ -202,9 +198,9 @@ nom_audiorec_alsa()
 # $1 note name, $2 save name
 nom_audiorec()
 {
-  nom_audiorec_ffmpeg $@
-  #nom_audiorec_pulse $@
-  #nom_audiorec_alsa $@
+  nom_audiorec_ffmpeg "$@"
+  #nom_audiorec_pulse "$@"
+  #nom_audiorec_alsa "$@"
   
 }
 
@@ -883,7 +879,7 @@ file_create_quest_new()
   else
     ! create_noteitem_test "$1" "$2" && return 1
     decoded_notename="$(note_exist_echo "$1" "y")"
-    status=$?
+    status="$?"
     if [ "$status" = "2" ]; then
       return 2
     elif [ "$status" != "0" ]; then
