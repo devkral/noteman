@@ -1708,7 +1708,12 @@ case "$sel_option" in
   "slocks"|"showlocks")show_locks "$@";;
   "remote_pick"|"rpick")remote_transfer_send "$@";;
   "synch"|"synchronize")synchronize "$@";;
-  "remote_file_receive") remote_transfer_receive "$@";;
+  "remote_file_receive")
+#needed for check
+temp11="$1"
+temp12="$2"
+shift 2
+remote_transfer_receive "$temp11" "$temp12" "$@";;
   "remote") remote_command "$@";;
   "remote_file_exists") remote_file_exists "$@";;
   "list")
