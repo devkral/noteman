@@ -1,5 +1,10 @@
 noteman is a simple note manager with advanced capabilities.
 For example the ability to scan
+TODO:
+synch: don't copy locks (easy make them invisible)
+overwrite: diff notetext
+
 
 Installation:
 copy script to a place you want to and change default cam and scanner to your hardware
+
