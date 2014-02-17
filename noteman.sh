@@ -26,6 +26,8 @@ default_save="$(date +%F_%T)"
 
 tmp_folder=/tmp/$UID-noteman
 default_delete_after_copy="ask"
+nom_rsync_options="-az"
+
 
 #env variables
 #NOM_NOTE_FOLDER
@@ -339,7 +341,7 @@ remote_transfer_send()
     return 1
   fi  
   #SSH_AUTH_SOCK="$NOM_sensitive"
-  scp -r "$1" "$remote_ssh:\"$rem_tmp_filepath\""
+  rsync "$nom_rsync_options" "$1" "$remote_ssh:\"$rem_tmp_filepath\""
   status=$?
   #SSH_AUTH_SOCK="$NOM_sensitive" 
   #ssh-add -D
@@ -362,6 +364,35 @@ remote_transfer_receive()
   echo "$tmp_filepath"
   exit 0
 }
+
+ 
+
+#DRAFT
+#$1 src_folder/noteitem  $2 dest_folder/noteitem $3 u skip newer files,b  make backups
+remote_rsync_transfer_send()
+{
+  if [ -z $remote_ssh ]; then
+    echo "Error: remote_ssh has not been set" >&2
+    return 1
+  elif [ -z $remote_noteman ]; then
+    echo "Error: remote_noteman has not been set" >&2
+    return 1
+  fi
+  if [ ! -e "$1" ]; then
+    echo "Error: \"$1\" path doesn't exist" >&2
+    return 1
+  fi
+
+	
+  #SSH_AUTH_SOCK="$NOM_sensitive"
+  rsync "-acz$additional_options"  "$1" "$remote_ssh:\"$rem_tmp_filepath\""
+  status="$?"
+  #if [ "$4" != "n" ] && [ "$status" = "0" ]; then
+  #  delete_old_file "$1"
+  #fi
+}
+
+
 
 #$1 src_folder $2 dest notename or id
 remote_mass_transfer_send()
@@ -399,11 +430,14 @@ remote_mass_transfer_send()
 
   if [ "$tmp_problem_files" != "" ]; then
     echo -e "Files:\n$tmp_problem_files" >&2
-    echo "exist already. Overwrite [y]? abort (default)" >&2
+    echo "exist already. Overwrite [y]? Overwrite if newer [n]? abort (default)" >&2
     local question_an
     read question_an
     if echo "$question_an" | grep -i -q "y"; then
       echo "Overwrite..." >&2
+		elif echo "$question_an" | grep -i -q "n"; then
+      echo "Overwrite if newer..." >&2
+			nom_rsync_additional="u"
     else
       echo "Do nothing" >&2
       return 2
@@ -411,7 +445,7 @@ remote_mass_transfer_send()
   fi
 
   #SSH_AUTH_SOCK="$NOM_sensitive"
-  scp -r "$1"/* "$remote_ssh:\"$rem_tmp_filepath\""
+  rsync "$nom_rsync_options$nom_rsync_additional" --exclude="$1/$trash_name" --exclude="$1/$remote_lock" --exclude="$1/$local_lock" -r "$1"/* "$remote_ssh:\"$rem_tmp_filepath\""
   status="$?"
   #if [ "$4" != "n" ] && [ "$status" = "0" ]; then
   #  delete_old_file "$1"
@@ -445,7 +479,7 @@ remote_file_exists()
 #$@ execute commands remote
 remote_command()
 {
-  ssh "$remote_ssh" "$remote_noteman is_runremote $@"
+  ssh -t "$remote_ssh" "$remote_noteman is_runremote $@"
 }
 
 #$1 filepath
@@ -944,6 +978,7 @@ file_create_quest_new()
     nonoi_create_check "$1"
     status=$?
     if [ "$status" = "2" ]; then
+#add info if newer/older
       echo "Note exists already. [M]ove old? [R]ename new? [Over]write?  abort (default) " >&2
       local question_an
       read question_an
