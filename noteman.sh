@@ -978,7 +978,7 @@ file_create_quest_new()
     nonoi_create_check "$1"
     status=$?
     if [ "$status" = "2" ]; then
-#add info if newer/older
+#TODO: add info if newer/older
       echo "Note exists already. [M]ove old? [R]ename new? [Over]write?  abort (default) " >&2
       local question_an
       read question_an
