@@ -328,10 +328,10 @@ remote_transfer_send()
   fi
   #RANDOM="$(date +%s)"
   #NOM_sensitive="$tmp_folder/nomsend$RANDOM"
-  [ "$askpass_is_set" = "false" ] && [ "$SSH_AGENT_PID" = "" ] &&  ssh-agent -t $nom_ssh_agent_timeout 2> /dev/null #-a "$NOM_sensitive"
+  ! ps -C "ssh-agent" &&  ssh-agent -t $nom_ssh_agent_timeout 2> /dev/null #-a "$NOM_sensitive"
   
   #SSH_AUTH_SOCK="$NOM_sensitive" 
-  [ "$askpass_is_set" = "false" ] && ssh-add
+  ssh-add
   rem_tmp_filepath="$(ssh $remote_ssh "$remote_noteman is_runremote remote_file_receive \"$2\" \"$b_name\"")"
   status=$?
   if [ "$status" = "2" ]; then
@@ -414,7 +414,7 @@ remote_mass_transfer_send()
   fi
   preparelist="$(ls -Q1 "$1" | tr "\n" " ")"
 
-  [ "$askpass_is_set" = "false" ] && ssh-add # -t 40
+  ssh-add # -t 40
 
   tmp_files="$(ssh $remote_ssh "$remote_noteman is_runremote remote_file_exists \"$2\" $preparelist")"
   status="$?"
@@ -1699,13 +1699,6 @@ synchronize()
 
 }
 
-
-#main
-if [ "$SSH_ASKPASS" != "" ]; then
-  askpass_is_set="true"
-else
-  askpass_is_set="false"
-fi
 
 if [ ! -e "$note_folder" ]; then
   mkdir -m700 "$note_folder"
