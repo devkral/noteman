@@ -328,7 +328,7 @@ remote_transfer_send()
   fi
   #RANDOM="$(date +%s)"
   #NOM_sensitive="$tmp_folder/nomsend$RANDOM"
-  ! ps -C "ssh-agent" &&  ssh-agent -t $nom_ssh_agent_timeout 2> /dev/null #-a "$NOM_sensitive"
+  
   
   #SSH_AUTH_SOCK="$NOM_sensitive" 
   ssh-add
@@ -1698,7 +1698,7 @@ synchronize()
   fi
 
 }
-
+! ps -C "ssh-agent" > /dev/null &&  ssh-agent -t $nom_ssh_agent_timeout > /dev/null #-a "$NOM_sensitive"
 
 if [ ! -e "$note_folder" ]; then
   mkdir -m700 "$note_folder"
