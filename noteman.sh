@@ -1,4 +1,4 @@
-#/usr/bin/env bash
+#!/usr/bin/env bash
 #LICENCE: gpl3
 
 #dependencies: bash, sane, imagemagick, ffmpeg v4l-utils, (vlc),(vimdiff)
@@ -27,7 +27,7 @@ default_save="$(date +%F_%T)"
 tmp_folder=/tmp/$UID-noteman
 default_delete_after_copy="ask"
 nom_rsync_options="-az"
-
+nom_ssh_agent_timeout=300
 
 #env variables
 #NOM_NOTE_FOLDER
@@ -328,11 +328,10 @@ remote_transfer_send()
   fi
   #RANDOM="$(date +%s)"
   #NOM_sensitive="$tmp_folder/nomsend$RANDOM"
-  if ! ps -C "ssh-agent" &> /dev/null ; then
-    ssh-agent 2> /dev/null #-a "$NOM_sensitive"
-  fi
+  
+  
   #SSH_AUTH_SOCK="$NOM_sensitive" 
-  ssh-add -t 40
+  ssh-add -t $nom_ssh_agent_timeout
   rem_tmp_filepath="$(ssh $remote_ssh "$remote_noteman is_runremote remote_file_receive \"$2\" \"$b_name\"")"
   status=$?
   if [ "$status" = "2" ]; then
@@ -415,7 +414,7 @@ remote_mass_transfer_send()
   fi
   preparelist="$(ls -Q1 "$1" | tr "\n" " ")"
 
-  ssh-add -t 40
+  ssh-add -t $nom_ssh_agent_timeout
 
   tmp_files="$(ssh $remote_ssh "$remote_noteman is_runremote remote_file_exists \"$2\" $preparelist")"
   status="$?"
@@ -430,14 +429,14 @@ remote_mass_transfer_send()
 
   if [ "$tmp_problem_files" != "" ]; then
     echo -e "Files:\n$tmp_problem_files" >&2
-    echo "exist already. Overwrite [y]? Overwrite if newer [n]? abort (default)" >&2
+    echo "exist already. Overwrite [y]? Update if newer [u]? abort (default)" >&2
     local question_an
     read question_an
     if echo "$question_an" | grep -i -q "y"; then
       echo "Overwrite..." >&2
-		elif echo "$question_an" | grep -i -q "n"; then
-      echo "Overwrite if newer..." >&2
-			nom_rsync_additional="u"
+      elif echo "$question_an" | grep -i -q "u"; then
+      echo "Update if newer..." >&2
+      nom_rsync_additional="u"
     else
       echo "Do nothing" >&2
       return 2
@@ -1699,10 +1698,7 @@ synchronize()
   fi
 
 }
-
-
-#main
-
+[ ! -e "$SSH_AUTH_SOCKET" ] || [ "$SSH_AUTH_SOCKET" = "" ] && ssh-agent -t $nom_ssh_agent_timeout > /dev/null #-a "$NOM_sensitive"
 
 if [ ! -e "$note_folder" ]; then
   mkdir -m700 "$note_folder"
