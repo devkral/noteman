@@ -1,4 +1,4 @@
-#/usr/bin/env bash
+#!/usr/bin/env bash
 #LICENCE: gpl3
 
 #dependencies: bash, sane, imagemagick, ffmpeg v4l-utils, (vlc),(vimdiff)
@@ -434,9 +434,9 @@ remote_mass_transfer_send()
     read question_an
     if echo "$question_an" | grep -i -q "y"; then
       echo "Overwrite..." >&2
-		elif echo "$question_an" | grep -i -q "u"; then
+      elif echo "$question_an" | grep -i -q "u"; then
       echo "Update if newer..." >&2
-			nom_rsync_additional="u"
+      nom_rsync_additional="u"
     else
       echo "Do nothing" >&2
       return 2
