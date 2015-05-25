@@ -27,7 +27,7 @@ default_save="$(date +%F_%T)"
 tmp_folder=/tmp/$UID-noteman
 default_delete_after_copy="ask"
 nom_rsync_options="-az"
-nom_ssh_agent_timeout=300
+#nom_ssh_agent_timeout=300
 
 #env variables
 #NOM_NOTE_FOLDER
@@ -331,7 +331,7 @@ remote_transfer_send()
   
   
   #SSH_AUTH_SOCK="$NOM_sensitive" 
-  ssh-add -t $nom_ssh_agent_timeout
+  #ssh-add -t $nom_ssh_agent_timeout
   rem_tmp_filepath="$(ssh $remote_ssh "$remote_noteman is_runremote remote_file_receive \"$2\" \"$b_name\"")"
   status=$?
   if [ "$status" = "2" ]; then
@@ -414,7 +414,7 @@ remote_mass_transfer_send()
   fi
   preparelist="$(ls -Q1 "$1" | tr "\n" " ")"
 
-  ssh-add -t $nom_ssh_agent_timeout
+  #ssh-add -t $nom_ssh_agent_timeout
 
   tmp_files="$(ssh $remote_ssh "$remote_noteman is_runremote remote_file_exists \"$2\" $preparelist")"
   status="$?"
@@ -1698,7 +1698,7 @@ synchronize()
   fi
 
 }
-[ ! -e "$SSH_AUTH_SOCKET" ] || [ "$SSH_AUTH_SOCKET" = "" ] && ssh-agent -t $nom_ssh_agent_timeout > /dev/null #-a "$NOM_sensitive"
+#[ ! -e "$SSH_AUTH_SOCKET" ] || [ "$SSH_AUTH_SOCKET" = "" ] && ssh-agent -t $nom_ssh_agent_timeout > /dev/null #-a "$NOM_sensitive"
 
 if [ ! -e "$note_folder" ]; then
   mkdir -m700 "$note_folder"
