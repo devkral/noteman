@@ -340,7 +340,7 @@ remote_transfer_send()
     return 1
   fi  
   #SSH_AUTH_SOCK="$NOM_sensitive"
-  rsync "$nom_rsync_options" "$1" "$remote_ssh:\"$rem_tmp_filepath\""
+  rsync $nom_rsync_options "$1" "$remote_ssh:\"$rem_tmp_filepath\""
   status=$?
   #SSH_AUTH_SOCK="$NOM_sensitive" 
   #ssh-add -D
@@ -444,7 +444,7 @@ remote_mass_transfer_send()
   fi
 
   #SSH_AUTH_SOCK="$NOM_sensitive"
-  rsync "$nom_rsync_options$nom_rsync_additional" --exclude="$1/$trash_name" --exclude="$1/$remote_lock" --exclude="$1/$local_lock" -r "$1"/* "$remote_ssh:\"$rem_tmp_filepath\""
+  rsync $nom_rsync_options "-$nom_rsync_additional" --exclude="$1/$trash_name" --exclude="$1/$remote_lock" --exclude="$1/$local_lock" -r "$1"/* "$remote_ssh:\"$rem_tmp_filepath\""
   status="$?"
   #if [ "$4" != "n" ] && [ "$status" = "0" ]; then
   #  delete_old_file "$1"
