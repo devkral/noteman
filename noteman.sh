@@ -436,7 +436,7 @@ remote_mass_transfer_send()
       echo "Overwrite..." >&2
       elif echo "$question_an" | grep -i -q "u"; then
       echo "Update if newer..." >&2
-      nom_rsync_additional="u"
+      nom_rsync_additional=" -u"
     else
       echo "Do nothing" >&2
       return 2
@@ -444,7 +444,7 @@ remote_mass_transfer_send()
   fi
 
   #SSH_AUTH_SOCK="$NOM_sensitive"
-  rsync $nom_rsync_options "-$nom_rsync_additional" --exclude="$1/$trash_name" --exclude="$1/$remote_lock" --exclude="$1/$local_lock" -r "$1"/* "$remote_ssh:\"$rem_tmp_filepath\""
+  rsync $nom_rsync_options$nom_rsync_additional --exclude="$1/$trash_name" --exclude="$1/$remote_lock" --exclude="$1/$local_lock" -r "$1"/* "$remote_ssh:\"$rem_tmp_filepath\""
   status="$?"
   #if [ "$4" != "n" ] && [ "$status" = "0" ]; then
   #  delete_old_file "$1"
